@@ -25,63 +25,37 @@ const WARMUP = {
 // Each stimulus below names its own file inside this folder.
 const VIDEO_FOLDER = "mp4/";
 
+// ---- Intro videos --------------------------------------------------
+// Played in order after the warm-up and before the first Part 1 trial. Not recorded.
+// The button stays disabled until each video has finished playing.
+const INTRO_VIDEOS = {
+  videos: ["main_trial_0.mp4", "main_trial_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
+  button: "Continue",
+};
+
 // ---- Main parts ----------------------------------------------------
-// Each part has its own instructions, per-trial prompt, stimuli and settings.
+// Each part has its own per-trial prompt, stimuli and settings.
 const PARTS = [
   {
-    instructions: [
-      // screen 1
-      `<h3>Part 1 of 2</h3>
-      <p>In this study, you'll be talking about yourself, by providing short verbal responses.
-       There are no right or wrong answers, we’re just curious what people say about themselves!</p>`,
-      
-      // screen 2
-      `<p>Imagine you've just met someone new in a friendly, casual setting and you’ve just exchanged names (i.e., they already know your name). 
-       <b>What are some additional things you’d like to say about yourself?</b></p>
-
-      <p>You will be prompted to share <b>12 things about yourself</b>--please only share one thing at a time. Answer each one aloud,
-      then click <b>Done</b> to move on.</p>
-      
-      <p>Recording will start automatically, right after you click <b>Begin Part 1</b>.</p>`,
-    ],
-    start_button: "Begin Part 1",
-    trial_prompt: "Please share one thing about yourself at a time. Remember, the person you're talking to already knows your name.", // text above every trial
+    trial_prompt: " ", // text above every trial
     randomize_order: false, // keep order: first question first, final question last
     // Each stimulus: video = filename in VIDEO_FOLDER, text = shown under the video ("" for none)
     stimuli: [
-      { video: "main_trial_1.mp4", text: "What's the first thing you'd like to say about yourself?<span style='color:gray;'> (1 out of 12)</span>" },
-      { video: "main_trial_2.mp4", text: "What's another thing you'd like to say about yourself?<span style='color:gray;'> (2 out of 12)</span>" },
-      { video: "main_trial_3.mp4", text: "What else would you like to say about yourself?<span style='color:gray;'> (3 out of 12)</span>" },
-      { video: "main_trial_4.mp4", text: "What's another thing you'd like to share about yourself?<span style='color:gray;'> (4 out of 12)</span>" },
-      { video: "main_trial_5.mp4", text: "What else would you like to share about yourself?<span style='color:gray;'> (5 out of 12)</span>" },
-      { video: "main_trial_6.mp4", text: "What's another thing you'd like to say about yourself?<span style='color:gray;'> (6 out of 12)</span>" },
-      { video: "main_trial_7.mp4", text: "What else would you like to say about yourself?<span style='color:gray;'> (7 out of 12)</span>" },
-      { video: "main_trial_8.mp4", text: "What's another thing you'd like to share about yourself?<span style='color:gray;'> (8 out of 12)</span>" },
-      { video: "main_trial_9.mp4", text: "What else would you like to share about yourself?<span style='color:gray;'> (9 out of 12)</span>" },
-      { video: "main_trial_10.mp4", text: "What's another thing you'd like to say about yourself?<span style='color:gray;'> (10 out of 12)</span>" },
-      { video: "main_trial_11.mp4", text: "What else would you like to say about yourself?<span style='color:gray;'> (11 out of 12)</span>" },
-      { video: "main_trial_12.mp4", text: "What's the last thing you'd like to share about yourself?<span style='color:gray;'> (12 out of 12)</span>" },
+      { video: "main_trial_1.mp4", text: " " },
+      { video: "main_trial_2.mp4", text: " " },
+      { video: "main_trial_3.mp4", text: " " },
+      { video: "main_trial_4.mp4", text: " " },
+      { video: "main_trial_5.mp4", text: " " },
+      { video: "main_trial_6.mp4", text: " " },
+      { video: "main_trial_7.mp4", text: " " },
+      { video: "main_trial_8.mp4", text: " " },
+      { video: "main_trial_9.mp4", text: " " },
+      { video: "main_trial_10.mp4", text: " " },
+      { video: "main_trial_11.mp4", text: " " },
+      { video: "main_trial_12.mp4", text: " " },
     ],
   },
   {
-    instructions: [
-
-      // screen 1
-      `<h2>Part 2 of 2</h2>
-       <p>Thank you for sharing about yourself! Before we finish, there is one more task for you to complete.
-       <br>I am going to give you a category, and I want you to provide <b>12 things</b> that belong to that category.</p>
-       
-       <br><p>For example, if I said "fruits", you might respond with "apple", "banana", "grape", etc.
-       <p>But please provide only one answer at a time!
-       <br>e.g., after you say "apple", press <b>Continue</b> to submit before you say "banana".</p>
-       <p><span style="color:gray;">Press any key to begin.</span></p>`,
-
-        // screen 2
-       `<p>The category is: <b>Animals</b>
-        <br>You will be prompted to provide 12 animals--please only share one at a time.</p>`
-
-      ],
-    start_button: "Begin Part 2",
     trial_prompt: "Please provide one answer at a time. Click <b>Done</b> to move on.", // text above every trial
     randomize_order: false,
     stimuli: [
@@ -159,6 +133,26 @@ function stimulusHtml(prompt, text, video) {
     : "";
   const textHtml = text ? `<div class="stim-text">${text}</div>` : "";
   return `${REC_INDICATOR}${promptHtml}${videoHtml}${textHtml}`;
+}
+
+// Plays the screen's video and keeps its buttons disabled until the video has finished.
+// If autoplay is blocked, shows the video controls so the participant can press play.
+// Returns the video element (null if the screen has none).
+function playVideoWithLockedButtons(onAutoplayBlocked) {
+  const display = jsPsych.getDisplayElement();
+  const video = display.querySelector(".stim-video");
+  if (!video) return null;
+  const buttons = display.querySelectorAll("#jspsych-html-button-response-btngroup button");
+  const enableButtons = () => buttons.forEach((b) => (b.disabled = false));
+  buttons.forEach((b) => (b.disabled = true));
+  video.addEventListener("ended", enableButtons, { once: true });
+  // If the video can't be played at all, don't leave the participant stuck
+  video.addEventListener("error", enableButtons, { once: true });
+  video.play().catch(() => {
+    video.controls = true;
+    if (onAutoplayBlocked) onAutoplayBlocked();
+  });
+  return video;
 }
 
 // ---- Setup ---------------------------------------------------------
@@ -260,7 +254,10 @@ timeline.push({
 // ---- Preload stimulus videos ---------------------------------------
 timeline.push({
   type: jsPsychPreload,
-  video: PARTS.flatMap((part) => part.stimuli.map((s) => VIDEO_FOLDER + s.video)),
+  video: [
+    ...INTRO_VIDEOS.videos.map((v) => VIDEO_FOLDER + v),
+    ...PARTS.flatMap((part) => part.stimuli.map((s) => VIDEO_FOLDER + s.video)),
+  ],
   message: "<p>Loading videos, please wait...</p>",
   show_detailed_errors: true,
 });
@@ -286,17 +283,19 @@ timeline.push({
   },
 });
 
+// ---- Intro videos (not recorded) -----------------------------------
+INTRO_VIDEOS.videos.forEach((video) =>
+  timeline.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`,
+    choices: [INTRO_VIDEOS.button],
+    on_load: () => playVideoWithLockedButtons(),
+    data: { task: "intro_video", video },
+  })
+);
+
 // ---- Main parts ----------------------------------------------------
 function buildPart(part, partNumber) {
-  // One screen per instructions page; the last page uses the part's start button.
-  // Once the session recording is running, instruction screens show the indicator too.
-  const pages = [].concat(part.instructions);
-  const intro = pages.map((page, i) => ({
-    type: jsPsychHtmlButtonResponse,
-    stimulus: () => `${session.recorder ? REC_INDICATOR : ""}<div class="instructions">${page}</div>`,
-    choices: [i === pages.length - 1 ? part.start_button : "Continue"],
-  }));
-
   // Absolute times (performance.now()) for the current trial; converted to session time on finish
   let trialStart = null;
   let videoOnset = null;
@@ -311,7 +310,9 @@ function buildPart(part, partNumber) {
       trialStart = performance.now();
       videoOnset = null;
       videoEnd = null;
-      const video = jsPsych.getDisplayElement().querySelector(".stim-video");
+      // "Done" stays disabled until the video has finished; a blocked autoplay
+      // must not stop the session recording from starting
+      const video = playVideoWithLockedButtons(startSessionRecording);
       if (!video) {
         startSessionRecording();
         return;
@@ -324,26 +325,7 @@ function buildPart(part, partNumber) {
         },
         { once: true }
       );
-      // "Done" stays disabled until the video has finished playing
-      const buttons = jsPsych.getDisplayElement().querySelectorAll("#jspsych-html-button-response-btngroup button");
-      const enableButtons = () => buttons.forEach((b) => (b.disabled = false));
-      buttons.forEach((b) => (b.disabled = true));
-      video.addEventListener(
-        "ended",
-        () => {
-          videoEnd = performance.now();
-          enableButtons();
-        },
-        { once: true }
-      );
-      // If the video can't be played at all, don't leave the participant stuck
-      video.addEventListener("error", enableButtons, { once: true });
-      // Some browsers block autoplay; start the video explicitly. If that's blocked, show the
-      // video's controls so the participant can press play, and still start the session recording
-      video.play().catch(() => {
-        video.controls = true;
-        startSessionRecording();
-      });
+      video.addEventListener("ended", () => (videoEnd = performance.now()), { once: true });
     },
     data: {
       task: "recording",
@@ -372,7 +354,7 @@ function buildPart(part, partNumber) {
     randomize_order: part.randomize_order,
   };
 
-  return [...intro, trials];
+  return [trials];
 }
 
 PARTS.forEach((part, i) => timeline.push(...buildPart(part, i + 1)));
