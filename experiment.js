@@ -2,6 +2,10 @@
  * adult self-description study: 1 warm-up trial + main parts (self-description + category fluency)
  * ------------------------------------------------------------------ */
 
+// ====================================================================
+// STUDY CONFIGURATION 
+// ====================================================================
+
 // ---- Warm-up -------------------------------------------------------
 const WARMUP = {
   instructions: `
@@ -25,7 +29,7 @@ const VIDEO_FOLDER = "mp4/";
 // Played in order after the warm-up and before the first Part 1 trial. Not recorded.
 // The button stays disabled until each video has finished playing.
 const INTRO_VIDEOS = {
-  videos: ["main_trial_0.mp4", "main_trial_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
+  videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
   button: "Continue",
 };
 
