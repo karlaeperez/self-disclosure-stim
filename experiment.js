@@ -64,25 +64,25 @@ const PARTS = [
     trial_prompt: "Please provide one answer at a time. Click <b>Next</b> to move on.", // text above every trial
     randomize_order: false,
     stimuli: [
-      { video: "animal_trial_1.mp4", text: "What's the first animal that comes to mind?"},
-      { video: "animal_trial_2.mp4", text: "What's another animal?" },
-      { video: "animal_trial_3.mp4", text: "What's another animal?" },
-      { video: "animal_trial_4.mp4", text: "What's another animal?" },
-      { video: "animal_trial_5.mp4", text: "What's another animal?" },
-      { video: "animal_trial_6.mp4", text: "What's another animal?" },
-      { video: "animal_trial_7.mp4", text: "What's another animal?" },
-      { video: "animal_trial_8.mp4", text: "What's another animal?" },
-      { video: "animal_trial_9.mp4", text: "What's another animal?" },
-      { video: "animal_trial_10.mp4", text: "What's another animal?" },
-      { video: "animal_trial_11.mp4", text: "What's another animal?" },
-      { video: "animal_trial_12.mp4", text: "What's the last animal?" },
+      { video: "animal_trial_1.mp4", text: " "},
+      { video: "animal_trial_2.mp4", text: " " },
+      { video: "animal_trial_3.mp4", text: " " },
+      { video: "animal_trial_4.mp4", text: " " },
+      { video: "animal_trial_5.mp4", text: " " },
+      { video: "animal_trial_6.mp4", text: " " },
+      { video: "animal_trial_7.mp4", text: " " },
+      { video: "animal_trial_8.mp4", text: " " },
+      { video: "animal_trial_9.mp4", text: " " },
+      { video: "animal_trial_10.mp4", text: " " },
+      { video: "animal_trial_11.mp4", text: " " },
+      { video: "animal_trial_12.mp4", text: " " },
     ],
   },
 ];
 
 // ---- Main-part trials ----------------------------------------------
 // One continuous recording covers all main-part trials; this button just moves to the next one.
-const TRIAL_BUTTON = "Continue";
+const TRIAL_BUTTON = "Next";
 
 // ====================================================================
 
