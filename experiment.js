@@ -31,6 +31,7 @@ const VIDEO_FOLDER = "mp4/";
 // (e.g. before Part 2), it is paused during them and resumes when the part's trials start.
 // The button stays disabled until each video has finished playing.
 const INTRO_BUTTON = "Continue";
+const INTRO_LAST_BUTTON = "Start Recording"; // on the last intro video, right before the part's first trial
 
 // ---- Main parts ----------------------------------------------------
 // Each part has its own intro videos, per-trial prompt, stimuli and settings.
@@ -310,10 +311,11 @@ timeline.push({
 // ---- Main parts ----------------------------------------------------
 function buildPart(part, partNumber) {
   // Intro videos (not trials, not recorded): pause the session recording while they play
-  const intro = (part.intro_videos || []).map((video) => ({
+  const introVideos = part.intro_videos || [];
+  const intro = introVideos.map((video, i) => ({
     type: jsPsychHtmlButtonResponse,
     stimulus: `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`,
-    choices: [INTRO_BUTTON],
+    choices: [i === introVideos.length - 1 ? INTRO_LAST_BUTTON : INTRO_BUTTON],
     on_load: () => {
       pauseSessionRecording();
       playVideoWithLockedButtons();
