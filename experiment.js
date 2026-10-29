@@ -18,6 +18,9 @@ const WARMUP = {
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
   recording_duration_ms: 10000,
+  // Transition screen shown after the warm-up, before the first intro video
+  end_message: "<p>Thank you for checking your microphone! You are ready to begin the study.</p>",
+  end_button: "Next",
 };
 
 // ---- Video stimuli -------------------------------------------------
@@ -30,8 +33,8 @@ const VIDEO_FOLDER = "mp4/";
 // They are not trials and are not recorded: if the session recording is already running
 // (e.g. before Part 2), it is paused during them and resumes when the part's trials start.
 // The button stays disabled until each video has finished playing.
-const INTRO_BUTTON = "Continue";
-const INTRO_LAST_BUTTON = "Start Recording"; // on the last intro video, right before the part's first trial
+const INTRO_BUTTON = "Next";
+const INTRO_LAST_BUTTON = "Next (Start Recording)"; // on the last intro video, right before the part's first trial
 
 // ---- Main parts ----------------------------------------------------
 // Each part has its own intro videos, per-trial prompt, stimuli and settings.
@@ -306,6 +309,12 @@ timeline.push({
   on_finish: function (data) {
     data.response = null; // discard warm-up audio
   },
+});
+
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `<div class="instructions">${WARMUP.end_message}</div>`,
+  choices: [WARMUP.end_button],
 });
 
 // ---- Main parts ----------------------------------------------------
