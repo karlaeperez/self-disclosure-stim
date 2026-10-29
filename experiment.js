@@ -14,13 +14,13 @@ const WARMUP = {
     <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b>. You can listen to your recording and
        re-record as many times as you like until it sounds clear.</p>
        <p>The recording will start automatically, right after you click <b>Start Recording</b>.</p>`,
-  start_button: "Start Recording",
+  start_button: "Continue (Start Recording)",
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
   recording_duration_ms: 10000,
   // Transition screen shown after the warm-up, before the first intro video
   end_message: "<p>Thank you for checking your microphone! You are ready to begin the study.</p>",
-  end_button: "Next",
+  end_button: "Continue",
 };
 
 // ---- Video stimuli -------------------------------------------------
@@ -33,8 +33,8 @@ const VIDEO_FOLDER = "mp4/";
 // They are not trials and are not recorded: if the session recording is already running
 // (e.g. before Part 2), it is paused during them and resumes when the part's trials start.
 // The button stays disabled until each video has finished playing.
-const INTRO_BUTTON = "Next";
-const INTRO_LAST_BUTTON = "Next (Start Recording)"; // on the last intro video, right before the part's first trial
+const INTRO_BUTTON = "Continue";
+const INTRO_LAST_BUTTON = "Continue (Start Recording)"; // on the last intro video, right before the part's first trial
 
 // ---- Main parts ----------------------------------------------------
 // Each part has its own intro videos, per-trial prompt, stimuli and settings.
@@ -82,7 +82,7 @@ const PARTS = [
 
 // ---- Main-part trials ----------------------------------------------
 // One continuous recording covers all main-part trials; this button just moves to the next one.
-const TRIAL_BUTTON = "Next";
+const TRIAL_BUTTON = "Continue";
 
 // ====================================================================
 
