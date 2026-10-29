@@ -26,17 +26,17 @@ const WARMUP = {
 const VIDEO_FOLDER = "mp4/";
 
 // ---- Intro videos --------------------------------------------------
-// Played in order after the warm-up and before the first Part 1 trial. Not recorded.
+// Each part can list intro videos (intro_videos below) that play in order before its trials.
+// They are not trials and are not recorded: if the session recording is already running
+// (e.g. before Part 2), it is paused during them and resumes when the part's trials start.
 // The button stays disabled until each video has finished playing.
-const INTRO_VIDEOS = {
-  videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
-  button: "Continue",
-};
+const INTRO_BUTTON = "Continue";
 
 // ---- Main parts ----------------------------------------------------
-// Each part has its own per-trial prompt, stimuli and settings.
+// Each part has its own intro videos, per-trial prompt, stimuli and settings.
 const PARTS = [
   {
+    intro_videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
     trial_prompt: " ", // text above every trial
     randomize_order: false, // keep order: first question first, final question last
     // Each stimulus: video = filename in VIDEO_FOLDER, text = shown under the video ("" for none)
@@ -56,10 +56,10 @@ const PARTS = [
     ],
   },
   {
+    intro_videos: ["animal_trial_0.mp4"],
     trial_prompt: "Please provide one answer at a time. Click <b>Done</b> to move on.", // text above every trial
     randomize_order: false,
     stimuli: [
-      { video: "animal_trial_0.mp4", text: " "},
       { video: "animal_trial_1.mp4", text: "What's the first animal that comes to mind?"},
       { video: "animal_trial_2.mp4", text: "What's another animal?" },
       { video: "animal_trial_3.mp4", text: "What's another animal?" },
@@ -87,12 +87,15 @@ const REC_INDICATOR = `
   <div class="rec-indicator"><span class="rec-dot"></span>Recording in progress</div>`;
 
 // ---- Session-level recording ---------------------------------------
-// Starts when the first stimulus video starts playing and runs until the end of the study.
+// Starts when the first stimulus video starts playing and runs until the end of the study,
+// paused only during intro videos.
 let micStream = null;
 const session = {
   recorder: null,
   chunks: [],
   startTime: null, // performance.now() when the recorder actually started
+  pausedAt: null, // performance.now() when the current pause began
+  pausedTotal: 0, // ms spent paused so far (not in the audio file)
 };
 
 function startSessionRecording() {
@@ -105,6 +108,21 @@ function startSessionRecording() {
     session.startTime = performance.now();
   };
   session.recorder.start(1000); // collect in 1 s chunks so little is lost if something fails
+}
+
+function pauseSessionRecording() {
+  if (session.recorder && session.recorder.state === "recording") {
+    session.recorder.pause();
+    session.pausedAt = performance.now();
+  }
+}
+
+function resumeSessionRecording() {
+  if (session.recorder && session.recorder.state === "paused") {
+    session.recorder.resume();
+    session.pausedTotal += performance.now() - session.pausedAt;
+    session.pausedAt = null;
+  }
 }
 
 // Stops the recorder and resolves with the whole session as a base64 string
@@ -121,9 +139,12 @@ function stopSessionRecording() {
   });
 }
 
-// Milliseconds since the session recording started (null if it hasn't started)
+// Position in the session audio file, in ms (null if recording hasn't started).
+// Paused time is left out, so this matches the audio for times after the latest pause.
 function sessionTime(t) {
-  return session.startTime === null || t === null ? null : Math.round(t - session.startTime);
+  return session.startTime === null || t === null
+    ? null
+    : Math.round(t - session.startTime - session.pausedTotal);
 }
 
 // Recording screen: indicator, optional prompt line, optional video, then the stimulus text
@@ -256,8 +277,10 @@ timeline.push({
 timeline.push({
   type: jsPsychPreload,
   video: [
-    ...INTRO_VIDEOS.videos.map((v) => VIDEO_FOLDER + v),
-    ...PARTS.flatMap((part) => part.stimuli.map((s) => VIDEO_FOLDER + s.video)),
+    ...PARTS.flatMap((part) => [
+      ...(part.intro_videos || []).map((v) => VIDEO_FOLDER + v),
+      ...part.stimuli.map((s) => VIDEO_FOLDER + s.video),
+    ]),
   ],
   message: "<p>Loading videos, please wait...</p>",
   show_detailed_errors: true,
@@ -284,19 +307,20 @@ timeline.push({
   },
 });
 
-// ---- Intro videos (not recorded) -----------------------------------
-INTRO_VIDEOS.videos.forEach((video) =>
-  timeline.push({
-    type: jsPsychHtmlButtonResponse,
-    stimulus: `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`,
-    choices: [INTRO_VIDEOS.button],
-    on_load: () => playVideoWithLockedButtons(),
-    data: { task: "intro_video", video },
-  })
-);
-
 // ---- Main parts ----------------------------------------------------
 function buildPart(part, partNumber) {
+  // Intro videos (not trials, not recorded): pause the session recording while they play
+  const intro = (part.intro_videos || []).map((video) => ({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`,
+    choices: [INTRO_BUTTON],
+    on_load: () => {
+      pauseSessionRecording();
+      playVideoWithLockedButtons();
+    },
+    data: { task: "intro_video", part: partNumber, video },
+  }));
+
   // Absolute times (performance.now()) for the current trial; converted to session time on finish
   let trialStart = null;
   let videoOnset = null;
@@ -308,6 +332,7 @@ function buildPart(part, partNumber) {
       stimulusHtml(part.trial_prompt, jsPsych.timelineVariable("text"), jsPsych.timelineVariable("video")),
     choices: [TRIAL_BUTTON],
     on_load: () => {
+      resumeSessionRecording(); // no-op unless an intro video paused it
       trialStart = performance.now();
       videoOnset = null;
       videoEnd = null;
@@ -355,7 +380,7 @@ function buildPart(part, partNumber) {
     randomize_order: part.randomize_order,
   };
 
-  return [trials];
+  return [...intro, trials];
 }
 
 PARTS.forEach((part, i) => timeline.push(...buildPart(part, i + 1)));
