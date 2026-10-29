@@ -59,7 +59,8 @@ const PARTS = [
     trial_prompt: "Please provide one answer at a time. Click <b>Done</b> to move on.", // text above every trial
     randomize_order: false,
     stimuli: [
-      { video: "animal_trial_1.mp4", text: "What is the first animal that comes to mind?" },
+      { video: "animal_trial_0.mp4", text: " "},
+      { video: "animal_trial_1.mp4", text: "What's the first animal that comes to mind?"},
       { video: "animal_trial_2.mp4", text: "What's another animal?" },
       { video: "animal_trial_3.mp4", text: "What's another animal?" },
       { video: "animal_trial_4.mp4", text: "What's another animal?" },
