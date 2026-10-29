@@ -58,7 +58,7 @@ const PARTS = [
   },
   {
     intro_videos: ["animal_trial_0.mp4"],
-    trial_prompt: "Please provide one answer at a time. Click <b>Done</b> to move on.", // text above every trial
+    trial_prompt: "Please provide one answer at a time. Click <b>Next</b> to move on.", // text above every trial
     randomize_order: false,
     stimuli: [
       { video: "animal_trial_1.mp4", text: "What's the first animal that comes to mind?"},
@@ -79,7 +79,7 @@ const PARTS = [
 
 // ---- Main-part trials ----------------------------------------------
 // One continuous recording covers all main-part trials; this button just moves to the next one.
-const TRIAL_BUTTON = "Done";
+const TRIAL_BUTTON = "Next";
 
 // ====================================================================
 
@@ -338,7 +338,8 @@ function buildPart(part, partNumber) {
       trialStart = performance.now();
       videoOnset = null;
       videoEnd = null;
-      // "Done" stays disabled until the video has finishe
+      // "Next" stays disabled until the video has finished; a blocked autoplay
+      // must not stop the session recording from starting
       const video = playVideoWithLockedButtons(startSessionRecording);
       if (!video) {
         startSessionRecording();
