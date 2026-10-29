@@ -13,8 +13,8 @@ const WARMUP = {
     <p>Let's start with a practice recording so you can check your audio.</p>
     <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b>. You can listen to your recording and
        re-record as many times as you like until it sounds clear.</p>
-       <p>The recording will start automatically, right after you click <b>Start warm-up</b>.</p>`,
-  start_button: "Start warm-up",
+       <p>The recording will start automatically, right after you click <b>Start Recording</b>.</p>`,
+  start_button: "Start Recording",
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
   recording_duration_ms: 10000,
@@ -338,8 +338,7 @@ function buildPart(part, partNumber) {
       trialStart = performance.now();
       videoOnset = null;
       videoEnd = null;
-      // "Done" stays disabled until the video has finished; a blocked autoplay
-      // must not stop the session recording from starting
+      // "Done" stays disabled until the video has finishe
       const video = playVideoWithLockedButtons(startSessionRecording);
       if (!video) {
         startSessionRecording();
