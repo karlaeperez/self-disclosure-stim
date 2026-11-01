@@ -11,9 +11,9 @@ const WARMUP = {
   instructions: `
     <h2>Warm-up</h2>
     <p>Let's start with a practice recording so you can check your audio.</p>
-    <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b>. You can listen to your recording and
-       re-record as many times as you like until it sounds clear.</p>
-       <p>The recording will start automatically, right after you click <b>Start Recording</b>.</p>`,
+    <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b> to begin the warm-up trial and start recording. Please listen to your recording and
+       re-record until it sounds clear.</p>
+       <p>Rememder, the recording will start automatically, right after you click <b>Continue</b>.</p>`,
   start_button: "Continue (Start Recording)",
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
