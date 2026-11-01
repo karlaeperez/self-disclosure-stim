@@ -24,8 +24,7 @@ const WARMUP = {
 };
 
 // ---- Video stimuli -------------------------------------------------
-// Folder (in the GitHub repo, next to index.html) that holds the stimulus videos.
-// Each stimulus below names its own file inside this folder.
+// Folder in the GitHub repo where the mp4 files are stored (relative to the HTML file)
 const VIDEO_FOLDER = "mp4/";
 
 // ---- Intro videos --------------------------------------------------
@@ -42,7 +41,7 @@ const PARTS = [
   {
     intro_videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
     trial_prompt: " ", // text above every trial
-    randomize_order: false, // keep order: first question first, final question last
+    randomize_order: false, 
     // Each stimulus: video = filename in VIDEO_FOLDER, text = shown under the video ("" for none)
     stimuli: [
       { video: "main_trial_1.mp4", text: " " },
@@ -299,7 +298,8 @@ timeline.push({
 
 timeline.push({
   type: jsPsychHtmlAudioResponse,
-  stimulus: stimulusHtml(WARMUP.trial_prompt, WARMUP.text),
+  stimulus: `${stimulusHtml(WARMUP.trial_prompt, WARMUP.text)}
+    <p class="trial-prompt">Please replay your audio to check if it's clear. If not, please adjust your set up and record again until your audio is clear.</p>`,
   recording_duration: WARMUP.recording_duration_ms,
   show_done_button: true,
   allow_playback: true, // shows playback + "Record again" button
