@@ -6,6 +6,10 @@
 // STUDY CONFIGURATION 
 // ====================================================================
 
+// ---- Data saving (DataPipe -> OSF) ---------------------------------
+// Experiment ID from pipe.jspsych.org
+const DATAPIPE_EXPERIMENT_ID = "r6xeXGMfXPhn";
+
 // ---- Warm-up -------------------------------------------------------
 const WARMUP = {
   instructions: `
@@ -183,17 +187,12 @@ function playVideoWithLockedButtons(onAutoplayBlocked) {
 // ---- Setup ---------------------------------------------------------
 const jsPsych = initJsPsych({
   on_finish: function () {
-    // Keep the main-part trials and the session audio (warm-up and instruction screens are excluded)
-    const data = jsPsych.data
-      .get()
-      .filterCustom((trial) => trial.task === "recording" || trial.task === "session_audio");
-    const pid = jsPsych.data.getURLVariable("PROLIFIC_PID") || jsPsych.randomization.randomID(8);
-    data.localSave("json", `voice_study_${pid}.json`);
-
     jsPsych.getDisplayElement().innerHTML =
       "<p>Thank you! The study is complete. Your data has been saved.</p>";
   },
 });
+
+const pid = jsPsych.data.getURLVariable("PROLIFIC_PID") || jsPsych.randomization.randomID(8);
 
 const timeline = [];
 
@@ -496,6 +495,45 @@ timeline.push({
     data.response = sessionAudio; // base64-encoded audio of the whole session
     data.mime_type = session.recorder ? session.recorder.mimeType : null;
   },
+});
+
+// ---- Upload to DataPipe --------------------------------------------
+function audioExtension(mimeType) {
+  if (!mimeType) return "webm";
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+// Session audio as its own audio file (skipped if nothing was recorded, since an empty upload would stall)
+timeline.push({
+  timeline: [
+    {
+      type: jsPsychPipe,
+      action: "saveBase64",
+      experiment_id: DATAPIPE_EXPERIMENT_ID,
+      filename: () => `voice_study_${pid}.${audioExtension(session.recorder?.mimeType)}`,
+      data_string: () => sessionAudio,
+    },
+  ],
+  conditional_function: () => Boolean(sessionAudio),
+});
+
+// Main-part trials and session info (warm-up and instruction screens are excluded).
+// The audio itself is left out since it was uploaded above.
+timeline.push({
+  type: jsPsychPipe,
+  action: "save",
+  experiment_id: DATAPIPE_EXPERIMENT_ID,
+  filename: `voice_study_${pid}.json`,
+  data_string: () =>
+    JSON.stringify(
+      jsPsych.data
+        .get()
+        .filterCustom((trial) => trial.task === "recording" || trial.task === "session_audio")
+        .values()
+        .map((trial) => (trial.task === "session_audio" ? { ...trial, response: null } : trial))
+    ),
 });
 
 jsPsych.run(timeline);
