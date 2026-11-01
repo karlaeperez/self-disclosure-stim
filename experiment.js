@@ -11,9 +11,9 @@ const WARMUP = {
   instructions: `
     <h2>Warm-up</h2>
     <p>Let's start with a practice recording so you can check your audio.</p>
-    <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b> to begin the warm-up trial and start recording. Please listen to your recording and
+    <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b> to begin the warm-up trial. Please listen to your recording and
        re-record until it sounds clear.</p>
-       <p>Rememder, the recording will start automatically, right after you click <b>Continue</b>.</p>`,
+       <p>The recording will start automatically, right after you click <b>Continue</b>.</p>`,
   start_button: "Continue (Start Recording)",
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
@@ -297,16 +297,99 @@ timeline.push({
 });
 
 timeline.push({
-  type: jsPsychHtmlAudioResponse,
+  type: jsPsychHtmlButtonResponse,
   stimulus: `${stimulusHtml(WARMUP.trial_prompt, WARMUP.text)}
-    <p class="trial-prompt">Please replay your audio to check if it's clear. If not, please adjust your set up and record again until your audio is clear.</p>`,
-  recording_duration: WARMUP.recording_duration_ms,
-  show_done_button: true,
-  allow_playback: true, // shows playback + "Record again" button
-  record_again_button_label: "Record again",
-  accept_button_label: "Sounds good, continue",
+    <p class="trial-prompt">Please replay your audio to check if it's clear. If not, please adjust your set up and record again until your audio is clear.</p>
+    <p id="warmup-status" role="status">Recording your practice audio...</p>
+    <audio id="warmup-playback" controls hidden></audio>
+    <p><button class="jspsych-btn" id="warmup-record-again" type="button" hidden>Record again</button></p>`,
+  choices: [ "Sounds good, continue" ],
+  on_load: function () {
+    const display = jsPsych.getDisplayElement();
+    const status = display.querySelector("#warmup-status");
+    const playback = display.querySelector("#warmup-playback");
+    const recordAgainButton = display.querySelector("#warmup-record-again");
+    const acceptButton = display.querySelector("#jspsych-html-button-response-btngroup button");
+    let recorder = null;
+    let recordingTimer = null;
+    let playbackUrl = null;
+    let recordingFailed = false;
+
+    acceptButton.disabled = true;
+
+    const startRecording = () => {
+      if (recordingTimer !== null) {
+        clearTimeout(recordingTimer);
+        recordingTimer = null;
+      }
+      if (playbackUrl !== null) {
+        URL.revokeObjectURL(playbackUrl);
+        playbackUrl = null;
+      }
+      playback.pause();
+      playback.removeAttribute("src");
+      playback.hidden = true;
+      recordAgainButton.hidden = true;
+      acceptButton.disabled = true;
+      recordingFailed = false;
+      status.textContent = "Recording your practice audio...";
+
+      const mimeTypes = [
+        "audio/mp4;codecs=mp4a.40.2",
+        "audio/mp4",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+      ];
+      const mimeType =
+        typeof MediaRecorder.isTypeSupported === "function"
+          ? mimeTypes.find((type) => MediaRecorder.isTypeSupported(type))
+          : null;
+      const options = mimeType ? { mimeType } : undefined;
+      const chunks = [];
+
+      try {
+        recorder = new MediaRecorder(micStream, options);
+        recorder.addEventListener("dataavailable", (event) => {
+          if (event.data.size > 0) chunks.push(event.data);
+        });
+        recorder.addEventListener("stop", () => {
+          if (recordingFailed) return;
+          const type = recorder.mimeType || chunks[0]?.type;
+          const blob = new Blob(chunks, type ? { type } : undefined);
+          playbackUrl = URL.createObjectURL(blob);
+          playback.src = playbackUrl;
+          playback.hidden = false;
+          recordAgainButton.hidden = false;
+          acceptButton.disabled = false;
+          status.textContent = "Recording complete. Replay it to check that it is clear.";
+        }, { once: true });
+        recorder.addEventListener("error", () => {
+          recordingFailed = true;
+          status.textContent = "Recording failed. Please try recording again.";
+          recordAgainButton.hidden = false;
+        }, { once: true });
+        recorder.start();
+        recordingTimer = setTimeout(() => {
+          recordingTimer = null;
+          if (recorder.state === "recording") recorder.stop();
+        }, WARMUP.recording_duration_ms);
+      } catch (error) {
+        status.textContent = "Recording could not start. Please try again.";
+        recordAgainButton.hidden = false;
+        console.error("Warm-up audio recording failed:", error);
+      }
+    };
+
+    recordAgainButton.addEventListener("click", startRecording);
+    startRecording();
+  },
   data: { task: "warmup" },
   on_finish: function (data) {
+    const playback = jsPsych.getDisplayElement().querySelector("#warmup-playback");
+    if (playback) {
+      playback.pause();
+      if (playback.src) URL.revokeObjectURL(playback.src);
+    }
     data.response = null; // discard warm-up audio
   },
 });
