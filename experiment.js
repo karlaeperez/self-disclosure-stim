@@ -39,11 +39,17 @@ const VIDEO_FOLDER = "mp4/";
 const INTRO_BUTTON = "Continue";
 const INTRO_LAST_BUTTON = "Continue (Start Recording)"; // on the last intro video, right before the part's first trial
 
+// ---- End videos ----------------------------------------------------
+// Each part can also list end videos (end_videos below) that play in order after its last trial.
+// Like intro videos, they are not recorded: the session recording is paused while they play.
+const END_BUTTON = "Continue";
+
 // ---- Main parts ----------------------------------------------------
 // Each part has its own intro videos, per-trial prompt, stimuli and settings.
 const PARTS = [
   {
     intro_videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
+    end_videos: ["main_trial_END.mp4"], // played after the last trial
     trial_prompt: " ", // text above every trial
     randomize_order: false, 
     // Each stimulus: video = filename in VIDEO_FOLDER, text = shown under the video ("" for none)
@@ -64,6 +70,7 @@ const PARTS = [
   },
   {
     intro_videos: ["animal_trial_0.mp4"],
+    end_videos: ["animal_trial_END.mp4"],
     trial_prompt: "Please provide one answer at a time. Click <b>Next</b> to move on.", // text above every trial
     randomize_order: false,
     stimuli: [
@@ -282,6 +289,7 @@ timeline.push({
     ...PARTS.flatMap((part) => [
       ...(part.intro_videos || []).map((v) => VIDEO_FOLDER + v),
       ...part.stimuli.map((s) => VIDEO_FOLDER + s.video),
+      ...(part.end_videos || []).map((v) => VIDEO_FOLDER + v),
     ]),
   ],
   message: "<p>Loading videos, please wait...</p>",
@@ -474,7 +482,19 @@ function buildPart(part, partNumber) {
     randomize_order: part.randomize_order,
   };
 
-  return [...intro, trials];
+  // End videos (not trials, not recorded): pause the session recording while they play
+  const end = (part.end_videos || []).map((video) => ({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`,
+    choices: [END_BUTTON],
+    on_load: () => {
+      pauseSessionRecording();
+      playVideoWithLockedButtons();
+    },
+    data: { task: "end_video", part: partNumber, video },
+  }));
+
+  return [...intro, trials, ...end];
 }
 
 PARTS.forEach((part, i) => timeline.push(...buildPart(part, i + 1)));
