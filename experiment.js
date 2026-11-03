@@ -58,13 +58,13 @@ const END_BUTTON = "Continue";
 // Each part has its own intro videos, per-trial prompt, stimuli and settings.
 const PARTS = [
   {
-    intro_videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_trial_000.mp4"], // filenames in VIDEO_FOLDER
+    intro_videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_adults_000.mp4"], // filenames in VIDEO_FOLDER
     end_videos: ["main_trial_END.mp4"], // played after the last trial
     trial_prompt: " ", // text above every trial
     randomize_order: false, 
     // Each stimulus: video = filename in VIDEO_FOLDER, text = shown under the video ("" for none)
     stimuli: [
-      { video: "main_trial_1.mp4", text: " " },
+      { video: "main_adults_1.mp4", text: " " },
       { video: "main_trial_2.mp4", text: " " },
       { video: "main_trial_3.mp4", text: " " },
       { video: "main_trial_4.mp4", text: " " },
