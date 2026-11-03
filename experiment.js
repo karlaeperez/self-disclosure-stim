@@ -450,7 +450,7 @@ const warmupRecord = {
 const warmupPlayback = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
-    <p class="trial-prompt">Please replay your audio to check if it's clear. If not, please adjust your set up and record again until your audio is clear.</p>
+    <p class="trial-prompt">Recording complete. Listen to it to check that it is clear.</p>
     <p id="warmup-status" role="status">Preparing your recording...</p>
     <audio id="warmup-playback" controls hidden></audio>`,
   choices: ["Record again", "Sounds good, continue"],
@@ -458,18 +458,31 @@ const warmupPlayback = {
     const display = jsPsych.getDisplayElement();
     const status = display.querySelector("#warmup-status");
     const playback = display.querySelector("#warmup-playback");
-    const acceptButton = display.querySelectorAll("#jspsych-html-button-response-btngroup button")[1];
+    const [recordAgainButton, acceptButton] = display.querySelectorAll(
+      "#jspsych-html-button-response-btngroup button"
+    );
+    // Both buttons stay disabled until the participant starts playing the recording
+    recordAgainButton.disabled = true;
     acceptButton.disabled = true;
 
     const blob = await warmupAudio;
     if (!blob || blob.size === 0) {
       status.textContent = "Recording failed. Please record again.";
+      recordAgainButton.disabled = false;
       return;
     }
+    playback.addEventListener("play", () => {
+      recordAgainButton.disabled = false;
+      acceptButton.disabled = false;
+    }, { once: true });
+    // If the recording can't be played, don't leave the participant stuck
+    playback.addEventListener("error", () => {
+      status.textContent = "Your recording could not be played. Please record again.";
+      recordAgainButton.disabled = false;
+    }, { once: true });
     playback.src = URL.createObjectURL(blob);
     playback.hidden = false;
-    acceptButton.disabled = false;
-    status.textContent = "Recording complete. Replay it to check that it is clear.";
+    status.textContent = "If your audio is unclear, please adjust your setup and record again until it is clear.";
   },
   data: { task: "warmup" },
   on_finish: function (data) {
