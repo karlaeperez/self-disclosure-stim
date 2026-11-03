@@ -10,6 +10,16 @@
 // Experiment ID from pipe.jspsych.org
 const DATAPIPE_EXPERIMENT_ID = "r6xeXGMfXPhn";
 
+// ---- reCAPTCHA (bot check, first screen of the study) --------------
+const RECAPTCHA = {
+  site_key: "6LcbqQ4uAAAAAPxvFgouL1OUQKPUN0G7flu2jHq3", // public key from Google Cloud
+  verify_url: "https://recaptcha-verify.perezke.workers.dev", // Cloudflare Worker (recaptcha-worker.js)
+  // false = participants who fail verification continue and are flagged (recaptcha_passed in the data)
+  // true = they are stopped on the reCAPTCHA screen with fail_message
+  block_on_fail: false,
+  fail_message: "<p>Sorry, we couldn't verify your browser. Please contact the researcher.</p>",
+};
+
 // ---- Warm-up -------------------------------------------------------
 const WARMUP = {
   instructions: `
@@ -202,6 +212,80 @@ const jsPsych = initJsPsych({
 const pid = jsPsych.data.getURLVariable("PROLIFIC_PID") || jsPsych.randomization.randomID(8);
 
 const timeline = [];
+
+// ---- reCAPTCHA -----------------------------------------------------
+// Checkbox must be ticked before Continue is enabled; the token is then checked
+// by the Cloudflare Worker (it expires after 2 minutes, so it must be checked live).
+let recaptchaResult = { passed: null, error: null };
+timeline.push({
+  type: jsPsychCallFunction,
+  async: true,
+  func: function (done) {
+    const display = jsPsych.getDisplayElement();
+    const fail = (error) => {
+      recaptchaResult = { passed: false, error };
+      if (RECAPTCHA.block_on_fail) display.innerHTML = RECAPTCHA.fail_message;
+      else done();
+    };
+
+    // Script blocked (e.g. by a browser extension)
+    if (typeof grecaptcha === "undefined") {
+      recaptchaResult = { passed: null, error: "script-not-loaded" };
+      if (RECAPTCHA.block_on_fail) display.innerHTML = RECAPTCHA.fail_message;
+      else done();
+      return;
+    }
+
+    display.innerHTML = `
+      <p>Before we begin, please confirm that you are not a robot.</p>
+      <div id="recaptcha-box" style="display:inline-block; margin:10px 0;"></div>
+      <p id="recaptcha-status" role="status"></p>
+      <p><button class="jspsych-btn" id="recaptcha-continue" disabled>Continue</button></p>`;
+    const status = display.querySelector("#recaptcha-status");
+    const button = display.querySelector("#recaptcha-continue");
+    let token = null;
+
+    grecaptcha.ready(() =>
+      grecaptcha.render("recaptcha-box", {
+        sitekey: RECAPTCHA.site_key,
+        callback: (t) => {
+          token = t;
+          button.disabled = false;
+        },
+        "expired-callback": () => {
+          token = null;
+          button.disabled = true;
+        },
+      })
+    );
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      status.textContent = "Checking...";
+      try {
+        const res = await fetch(RECAPTCHA.verify_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        const result = await res.json();
+        if (result.success === true) {
+          recaptchaResult = { passed: true, error: null };
+          done();
+        } else {
+          fail((result.error_codes || []).join(",") || "failed");
+        }
+      } catch (err) {
+        fail("verifier-unreachable");
+      }
+    });
+  },
+  data: { task: "recaptcha" },
+  on_finish: (data) => {
+    data.recaptcha_passed = recaptchaResult.passed;
+    data.recaptcha_error = recaptchaResult.error;
+  },
+});
 
 // ---- Welcome & microphone ------------------------------------------
 timeline.push({
@@ -539,7 +623,7 @@ timeline.push({
   conditional_function: () => Boolean(sessionAudio),
 });
 
-// Main-part trials and session info (warm-up and instruction screens are excluded).
+// reCAPTCHA result, main-part trials and session info (warm-up and instruction screens are excluded).
 // The audio itself is left out since it was uploaded above.
 timeline.push({
   type: jsPsychPipe,
@@ -550,7 +634,7 @@ timeline.push({
     JSON.stringify(
       jsPsych.data
         .get()
-        .filterCustom((trial) => trial.task === "recording" || trial.task === "session_audio")
+        .filterCustom((trial) => ["recaptcha", "recording", "session_audio"].includes(trial.task))
         .values()
         .map((trial) => (trial.task === "session_audio" ? { ...trial, response: null } : trial))
     ),
