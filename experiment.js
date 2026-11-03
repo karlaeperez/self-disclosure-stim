@@ -6,9 +6,18 @@
 // STUDY CONFIGURATION 
 // ====================================================================
 
-// ---- Data saving (DataPipe -> OSF) ---------------------------------
+// ---- Data saving (DataPipe -> GDrive) ---------------------------------
 // Experiment ID from pipe.jspsych.org
 const DATAPIPE_EXPERIMENT_ID = "r6xeXGMfXPhn";
+// Shown only if an upload fails after retrying; the participant can then download their files
+const UPLOAD_FAILED_MESSAGE = `
+  <p>Sorry, we couldn't save your data to our server.</p>
+  <p>Please click <b>Download my data</b> and send the downloaded files to us through a Prolific message.
+     You will still be credited for completing the study.</p>`;
+
+// ---- Prolific ------------------------------------------------------
+// Participants are sent here at the end of the study
+const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=CJG2TUCF";
 
 // ---- reCAPTCHA (bot check, first screen of the study) --------------
 const RECAPTCHA = {
@@ -124,7 +133,8 @@ const session = {
 
 function startSessionRecording() {
   if (session.recorder) return;
-  session.recorder = new MediaRecorder(micStream);
+  // 64 kbps is plenty for speech and keeps long sessions under DataPipe's 32 MB upload limit
+  session.recorder = new MediaRecorder(micStream, { audioBitsPerSecond: 64000 });
   session.recorder.ondataavailable = (e) => {
     if (e.data.size > 0) session.chunks.push(e.data);
   };
@@ -205,7 +215,8 @@ function playVideoWithLockedButtons(onAutoplayBlocked) {
 const jsPsych = initJsPsych({
   on_finish: function () {
     jsPsych.getDisplayElement().innerHTML =
-      "<p>Thank you! The study is complete. Your data has been saved.</p>";
+      "<p>Thank you! The study is complete. Redirecting you to Prolific...</p>";
+    window.location.href = PROLIFIC_COMPLETION_URL;
   },
 });
 
@@ -615,6 +626,14 @@ timeline.push({
 });
 
 // ---- Upload to DataPipe --------------------------------------------
+// Uploads call DataPipe's API directly (instead of plugin-pipe) so failures can be detected
+// and retried: plugin-pipe reports network errors as successes and can hang on a server error.
+const DATAPIPE_URL = "https://pipe.jspsych.org/api";
+const UPLOAD_ATTEMPTS = 3;
+
+// Random suffix so a participant who restarts doesn't hit DataPipe's duplicate-filename rejection
+const fileBase = `voice_study_${pid}_${jsPsych.randomization.randomID(6)}`;
+
 function audioExtension(mimeType) {
   if (!mimeType) return "webm";
   if (mimeType.includes("mp4")) return "m4a";
@@ -622,35 +641,90 @@ function audioExtension(mimeType) {
   return "webm";
 }
 
-// Session audio as its own audio file (skipped if nothing was recorded, since an empty upload would stall)
-timeline.push({
-  timeline: [
-    {
-      type: jsPsychPipe,
-      action: "saveBase64",
-      experiment_id: DATAPIPE_EXPERIMENT_ID,
-      filename: () => `voice_study_${pid}.${audioExtension(session.recorder?.mimeType)}`,
-      data_string: () => sessionAudio,
-    },
-  ],
-  conditional_function: () => Boolean(sessionAudio),
-});
+// Resolves true once DataPipe accepts the file; retries network and server errors
+async function uploadToDataPipe(endpoint, filename, dataString) {
+  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(`${DATAPIPE_URL}/${endpoint}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "*/*" },
+        body: JSON.stringify({ experimentID: DATAPIPE_EXPERIMENT_ID, filename, data: dataString }),
+      });
+      if (res.ok) return true;
+      const body = await res.text();
+      console.error(`DataPipe rejected ${filename} (${res.status}):`, body);
+      if (res.status < 500) return false; // e.g. FILE_EXISTS or SESSION_LIMIT_REACHED: retrying won't help
+    } catch (error) {
+      console.error(`Uploading ${filename} failed:`, error);
+    }
+    if (attempt < UPLOAD_ATTEMPTS) await new Promise((r) => setTimeout(r, 2000 * attempt));
+  }
+  return false;
+}
 
-// reCAPTCHA result, main-part trials and session info (warm-up and instruction screens are excluded).
-// The audio itself is left out since it was uploaded above.
+// Files that could not be uploaded; offered as downloads on the fallback screen
+const failedUploads = [];
+
 timeline.push({
-  type: jsPsychPipe,
-  action: "save",
-  experiment_id: DATAPIPE_EXPERIMENT_ID,
-  filename: `voice_study_${pid}.json`,
-  data_string: () =>
-    JSON.stringify(
+  type: jsPsychCallFunction,
+  async: true,
+  func: async function (done) {
+    jsPsych.getDisplayElement().innerHTML =
+      "<p>Saving your data. Please do not close this page.</p>";
+
+    // reCAPTCHA result, main-part trials and session info (warm-up and instruction screens are excluded).
+    // The audio itself is left out since it is uploaded as its own file.
+    const dataString = JSON.stringify(
       jsPsych.data
         .get()
         .filterCustom((trial) => ["recaptcha", "recording", "session_audio"].includes(trial.task))
         .values()
         .map((trial) => (trial.task === "session_audio" ? { ...trial, response: null } : trial))
-    ),
+    );
+    const dataFile = `${fileBase}.json`;
+    if (!(await uploadToDataPipe("data", dataFile, dataString))) {
+      failedUploads.push({ filename: dataFile, blob: new Blob([dataString], { type: "application/json" }) });
+    }
+
+    // Skipped if nothing was recorded
+    if (sessionAudio) {
+      const mimeType = session.recorder?.mimeType || "audio/webm";
+      const audioFile = `${fileBase}.${audioExtension(mimeType)}`;
+      if (!(await uploadToDataPipe("base64", audioFile, sessionAudio))) {
+        const blob = await (await fetch(`data:${mimeType};base64,${sessionAudio}`)).blob();
+        failedUploads.push({ filename: audioFile, blob });
+      }
+    }
+    done({ upload_failed: failedUploads.map((f) => f.filename) });
+  },
+  data: { task: "upload" },
+});
+
+// Only shown if an upload failed: let the participant download the files and send them to us
+timeline.push({
+  timeline: [
+    {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<div class="instructions">${UPLOAD_FAILED_MESSAGE}</div>
+        <p><button class="jspsych-btn" id="download-data" type="button">Download my data</button></p>`,
+      choices: ["Continue to Prolific"],
+      on_load: function () {
+        const display = jsPsych.getDisplayElement();
+        const continueButton = display.querySelector("#jspsych-html-button-response-btngroup button");
+        continueButton.disabled = true;
+        display.querySelector("#download-data").addEventListener("click", () => {
+          failedUploads.forEach(({ filename, blob }) => {
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+          });
+          continueButton.disabled = false;
+        });
+      },
+    },
+  ],
+  conditional_function: () => failedUploads.length > 0,
 });
 
 jsPsych.run(timeline);
