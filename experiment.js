@@ -33,11 +33,11 @@ const RECAPTCHA = {
 const WARMUP = {
   instructions: `
     <h2>Warm-up</h2>
-    <p>Let's start with a practice recording so you can check your audio.</p>
+    <p>Let's start with a practice voice recording so you can check your audio.</p>
     <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b>. Please listen to your recording and
        re-record until it sounds clear.</p>
-       <p>The recording will start automatically, right after you click <b>Continue</b>.</p>`,
-  start_button: "Continue (Start Recording)",
+       <p>The recording will start automatically, right after you click <b>Continue</b> down below.</p>`,
+  start_button: `Continue (Start Recording<span class="btn-rec-dot"></span>)`,
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
   recording_duration_ms: 10000,
@@ -57,7 +57,7 @@ const VIDEO_FOLDER = "mp4/";
 // The button stays disabled until each video has finished playing.
 const INTRO_BUTTON = "Continue";
 // On the last intro video, right before the part's first trial, if the recording hasn't started yet
-const INTRO_LAST_BUTTON = "Continue (Start Recording)";
+const INTRO_LAST_BUTTON = `Continue (Start Recording<span class="btn-rec-dot"></span>)`;
 
 // ---- End videos ----------------------------------------------------
 // Each part can also list end videos (end_videos below) that play in order after its last trial.
@@ -745,12 +745,12 @@ timeline.push({
     jsPsych.getDisplayElement().innerHTML =
       "<p>Saving your data. Please do not close this page.</p>";
 
-    // reCAPTCHA result, main-part trials and session info (warm-up and instruction screens are excluded).
+    // reCAPTCHA result, video loading info, main-part trials and session info (warm-up and instruction screens are excluded).
     // The audio itself is left out since it is uploaded as its own file.
     const dataString = JSON.stringify(
       jsPsych.data
         .get()
-        .filterCustom((trial) => ["recaptcha", "recording", "session_audio"].includes(trial.task))
+        .filterCustom((trial) => ["recaptcha", "video_wait", "recording", "session_audio"].includes(trial.task))
         .values()
         .map((trial) => (trial.task === "session_audio" ? { ...trial, response: null } : trial))
     );
