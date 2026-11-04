@@ -52,15 +52,16 @@ const VIDEO_FOLDER = "mp4/";
 
 // ---- Intro videos --------------------------------------------------
 // Each part can list intro videos (intro_videos below) that play in order before its trials.
-// They are not trials and are not recorded: if the session recording is already running
-// (e.g. before Part 2), it is paused during them and resumes when the part's trials start.
+// They are not trials. Part 1's intro plays before the session recording starts; later parts'
+// intros are recorded, since the session recording runs without pauses from Part 1's first trial on.
 // The button stays disabled until each video has finished playing.
 const INTRO_BUTTON = "Continue";
-const INTRO_LAST_BUTTON = "Continue (Start Recording)"; // on the last intro video, right before the part's first trial
+// On the last intro video, right before the part's first trial, if the recording hasn't started yet
+const INTRO_LAST_BUTTON = "Continue (Start Recording)";
 
 // ---- End videos ----------------------------------------------------
 // Each part can also list end videos (end_videos below) that play in order after its last trial.
-// Like intro videos, they are not recorded: the session recording is paused while they play.
+// They are recorded, except for the last part's: the session recording stops when they start.
 const END_BUTTON = "Continue";
 
 // ---- Main parts ----------------------------------------------------
@@ -120,16 +121,19 @@ const REC_INDICATOR = `
   <div class="rec-indicator"><span class="rec-dot"></span>Recording in progress</div>`;
 
 // ---- Session-level recording ---------------------------------------
-// Starts when the first stimulus video starts playing and runs until the end of the study,
-// paused only during intro videos.
+// One continuous recording, never paused: it starts when the first stimulus video starts playing
+// and stops right after the last trial of the last part.
 let micStream = null;
 const session = {
   recorder: null,
   chunks: [],
   startTime: null, // performance.now() when the recorder actually started
-  pausedAt: null, // performance.now() when the current pause began
-  pausedTotal: 0, // ms spent paused so far (not in the audio file)
+  stopped: null, // Promise from stopSessionRecording(), so it only stops once
 };
+
+function isSessionRecording() {
+  return session.recorder !== null && session.recorder.state === "recording";
+}
 
 function startSessionRecording() {
   if (session.recorder) return;
@@ -144,24 +148,11 @@ function startSessionRecording() {
   session.recorder.start(1000); // collect in 1 s chunks so little is lost if something fails
 }
 
-function pauseSessionRecording() {
-  if (session.recorder && session.recorder.state === "recording") {
-    session.recorder.pause();
-    session.pausedAt = performance.now();
-  }
-}
-
-function resumeSessionRecording() {
-  if (session.recorder && session.recorder.state === "paused") {
-    session.recorder.resume();
-    session.pausedTotal += performance.now() - session.pausedAt;
-    session.pausedAt = null;
-  }
-}
-
-// Stops the recorder and resolves with the whole session as a base64 string
+// Stops the recorder and resolves with the whole session as a base64 string.
+// Safe to call more than once: later calls return the same Promise.
 function stopSessionRecording() {
-  return new Promise((resolve) => {
+  if (session.stopped) return session.stopped;
+  session.stopped = new Promise((resolve) => {
     if (!session.recorder) return resolve(null);
     session.recorder.onstop = () => {
       const blob = new Blob(session.chunks, { type: session.recorder.mimeType });
@@ -171,14 +162,18 @@ function stopSessionRecording() {
     };
     session.recorder.stop();
   });
+  return session.stopped;
 }
 
-// Position in the session audio file, in ms (null if recording hasn't started).
-// Paused time is left out, so this matches the audio for times after the latest pause.
+// Position in the session audio file, in ms (null if recording hasn't started)
 function sessionTime(t) {
-  return session.startTime === null || t === null
-    ? null
-    : Math.round(t - session.startTime - session.pausedTotal);
+  return session.startTime === null || t === null ? null : Math.round(t - session.startTime);
+}
+
+// Video screen between trials (intro/end videos), with the recording indicator while recording
+function transitionVideoHtml(video) {
+  const indicator = isSessionRecording() ? REC_INDICATOR : "";
+  return `${indicator}<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`;
 }
 
 // Recording screen: indicator, optional prompt line, optional video, then the stimulus text
@@ -518,16 +513,13 @@ timeline.push({
 
 // ---- Main parts ----------------------------------------------------
 function buildPart(part, partNumber) {
-  // Intro videos (not trials, not recorded): pause the session recording while they play
+  // Intro videos (not trials): recorded only if the session recording is already running (Part 2+)
   const introVideos = part.intro_videos || [];
   const intro = introVideos.map((video, i) => ({
     type: jsPsychHtmlButtonResponse,
-    stimulus: `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`,
-    choices: [i === introVideos.length - 1 ? INTRO_LAST_BUTTON : INTRO_BUTTON],
-    on_load: () => {
-      pauseSessionRecording();
-      playVideoWithLockedButtons();
-    },
+    stimulus: () => transitionVideoHtml(video),
+    choices: () => [i === introVideos.length - 1 && !isSessionRecording() ? INTRO_LAST_BUTTON : INTRO_BUTTON],
+    on_load: () => playVideoWithLockedButtons(),
     data: { task: "intro_video", part: partNumber, video },
   }));
 
@@ -542,7 +534,6 @@ function buildPart(part, partNumber) {
       stimulusHtml(part.trial_prompt, jsPsych.timelineVariable("text"), jsPsych.timelineVariable("video")),
     choices: [TRIAL_BUTTON],
     on_load: () => {
-      resumeSessionRecording(); // no-op unless an intro video paused it
       trialStart = performance.now();
       videoOnset = null;
       videoEnd = null;
@@ -590,15 +581,17 @@ function buildPart(part, partNumber) {
     randomize_order: part.randomize_order,
   };
 
-  // End videos (not trials, not recorded): pause the session recording while they play
+  // End videos (not trials): recorded, except the last part's, where the session recording stops.
+  // Stopping in on_start (before the screen is drawn) keeps the indicator off that screen.
+  const isLastPart = partNumber === PARTS.length;
   const end = (part.end_videos || []).map((video) => ({
     type: jsPsychHtmlButtonResponse,
-    stimulus: `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`,
-    choices: [END_BUTTON],
-    on_load: () => {
-      pauseSessionRecording();
-      playVideoWithLockedButtons();
+    on_start: () => {
+      if (isLastPart) stopSessionRecording();
     },
+    stimulus: () => transitionVideoHtml(video),
+    choices: [END_BUTTON],
+    on_load: () => playVideoWithLockedButtons(),
     data: { task: "end_video", part: partNumber, video },
   }));
 
@@ -614,7 +607,7 @@ timeline.push({
   async: true,
   func: async function (done) {
     jsPsych.getDisplayElement().innerHTML = "<p>Saving your recording, please wait...</p>";
-    sessionAudio = await stopSessionRecording();
+    sessionAudio = await stopSessionRecording(); // already stopped if the last part has end videos
     micStream?.getTracks().forEach((t) => t.stop()); // release the microphone
     done();
   },
