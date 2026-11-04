@@ -170,10 +170,57 @@ function sessionTime(t) {
   return session.startTime === null || t === null ? null : Math.round(t - session.startTime);
 }
 
-// Preloaded in-memory copy of a video if the preload got it, otherwise its normal path
+// ---- Background video loading --------------------------------------
+// All videos start downloading as soon as the page opens, so they load while participants go
+// through consent, the microphone check and the warm-up. A failed download (e.g. a temporary
+// GitHub Pages 503) is retried. Right before Part 1, a loading screen is shown only if videos
+// are still downloading.
+const VIDEO_LOAD_ATTEMPTS = 4; // tries per video
+const VIDEO_LOAD_PARALLEL = 3; // videos downloading at once (in timeline order, so Part 1 comes first)
+const VIDEO_WAIT_MAX_MS = 180000; // longest the pre-Part 1 loading screen waits before moving on
+
+const videoFiles = [
+  ...new Set(
+    PARTS.flatMap((part) => [...(part.intro_videos || []), ...part.stimuli.map((s) => s.video), ...(part.end_videos || [])])
+  ),
+];
+const videoLoad = {
+  blobUrls: {}, // filename -> in-memory copy
+  failed: [], // filenames that failed every attempt
+  finished: 0, // loaded + failed
+  onProgress: null, // set by the loading screen
+};
+
+async function downloadVideo(video) {
+  for (let attempt = 1; attempt <= VIDEO_LOAD_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(VIDEO_FOLDER + video);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      videoLoad.blobUrls[video] = URL.createObjectURL(await response.blob());
+      return;
+    } catch (err) {
+      console.warn(`Video download failed (attempt ${attempt}/${VIDEO_LOAD_ATTEMPTS}): ${video}`, err);
+      if (attempt < VIDEO_LOAD_ATTEMPTS) await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+  videoLoad.failed.push(video);
+}
+
+const videosReady = (async () => {
+  const queue = [...videoFiles];
+  const worker = async () => {
+    while (queue.length) {
+      await downloadVideo(queue.shift());
+      videoLoad.finished += 1;
+      if (videoLoad.onProgress) videoLoad.onProgress();
+    }
+  };
+  await Promise.all(Array.from({ length: VIDEO_LOAD_PARALLEL }, worker));
+})();
+
+// In-memory copy of a video if it has downloaded, otherwise its normal path (streams instead)
 function videoSrc(video) {
-  const path = VIDEO_FOLDER + video;
-  return jsPsych.pluginAPI.getVideoBuffer(path) || path;
+  return videoLoad.blobUrls[video] || VIDEO_FOLDER + video;
 }
 
 // Video screen between trials (intro/end videos), with the recording indicator while recording
@@ -378,24 +425,6 @@ timeline.push({
   },
 });
 
-// ---- Preload stimulus videos ---------------------------------------
-timeline.push({
-  type: jsPsychPreload,
-  video: [
-    ...PARTS.flatMap((part) => [
-      ...(part.intro_videos || []).map((v) => VIDEO_FOLDER + v),
-      ...part.stimuli.map((s) => VIDEO_FOLDER + s.video),
-      ...(part.end_videos || []).map((v) => VIDEO_FOLDER + v),
-    ]),
-  ],
-  message: "<p>Loading videos, please wait...</p>",
-  show_detailed_errors: true,
-  // Never wait forever: after 3 minutes (or on a load error) move on anyway, and any video that
-  // didn't load streams from its normal path instead. Failed files are saved in failed_video.
-  max_load_time: 180000,
-  continue_after_error: true,
-});
-
 // ---- Warm-up (playback + re-record allowed, data NOT saved) ----------
 timeline.push({
   type: jsPsychHtmlButtonResponse,
@@ -519,6 +548,47 @@ timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<div class="instructions">${WARMUP.end_message}</div>`,
   choices: [WARMUP.end_button],
+});
+
+// ---- Wait for videos (skipped instantly if they finished during the warm-up) ----
+let videoWaitResult = {};
+timeline.push({
+  type: jsPsychCallFunction,
+  async: true,
+  func: function (done) {
+    const waitStart = performance.now();
+    let finished = false;
+    const finish = (timedOut) => {
+      if (finished) return;
+      finished = true;
+      videoLoad.onProgress = null;
+      videoWaitResult = {
+        video_wait_ms: Math.round(performance.now() - waitStart),
+        video_wait_timed_out: timedOut,
+        videos_loaded: Object.keys(videoLoad.blobUrls).length,
+        videos_total: videoFiles.length,
+        videos_failed: videoLoad.failed.join(";"),
+      };
+      done();
+    };
+    if (videoLoad.finished === videoFiles.length) return finish(false);
+
+    const display = jsPsych.getDisplayElement();
+    display.innerHTML = `
+      <p>Loading videos, please wait...</p>
+      <div class="load-bar"><div class="load-bar-fill" id="load-bar-fill"></div></div>`;
+    const update = () => {
+      const fill = document.getElementById("load-bar-fill");
+      if (fill) fill.style.width = `${(100 * videoLoad.finished) / videoFiles.length}%`;
+    };
+    update();
+    videoLoad.onProgress = update;
+    videosReady.then(() => finish(false));
+    // Don't hold anyone here forever; videos that haven't loaded will stream instead
+    setTimeout(() => finish(true), VIDEO_WAIT_MAX_MS);
+  },
+  data: { task: "video_wait" },
+  on_finish: (data) => Object.assign(data, videoWaitResult),
 });
 
 // ---- Main parts ----------------------------------------------------
