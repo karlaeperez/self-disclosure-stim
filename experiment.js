@@ -223,20 +223,20 @@ function videoSrc(video) {
   return videoLoad.blobUrls[video] || VIDEO_FOLDER + video;
 }
 
-// Video screen between trials (intro/end videos), with the recording indicator while recording
+// Video screen between trials (intro/end videos), with the recording indicator under the video while recording
 function transitionVideoHtml(video) {
   const indicator = isSessionRecording() ? REC_INDICATOR : "";
-  return `${indicator}<video class="stim-video" src="${videoSrc(video)}" autoplay playsinline></video>`;
+  return `<video class="stim-video" src="${videoSrc(video)}" autoplay playsinline></video>${indicator}`;
 }
 
-// Recording screen: indicator, optional prompt line, optional video, then the stimulus text
+// Recording screen: optional prompt line, optional video, recording indicator, then the stimulus text
 function stimulusHtml(prompt, text, video) {
   const promptHtml = prompt ? `<p class="trial-prompt">${prompt}</p>` : "";
   const videoHtml = video
     ? `<video class="stim-video" src="${videoSrc(video)}" autoplay playsinline></video>`
     : "";
   const textHtml = text ? `<div class="stim-text">${text}</div>` : "";
-  return `${REC_INDICATOR}${promptHtml}${videoHtml}${textHtml}`;
+  return `${promptHtml}${videoHtml}${REC_INDICATOR}${textHtml}`;
 }
 
 // Plays the screen's video and keeps its buttons disabled until the video has finished.
