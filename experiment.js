@@ -170,17 +170,23 @@ function sessionTime(t) {
   return session.startTime === null || t === null ? null : Math.round(t - session.startTime);
 }
 
+// Preloaded in-memory copy of a video if the preload got it, otherwise its normal path
+function videoSrc(video) {
+  const path = VIDEO_FOLDER + video;
+  return jsPsych.pluginAPI.getVideoBuffer(path) || path;
+}
+
 // Video screen between trials (intro/end videos), with the recording indicator while recording
 function transitionVideoHtml(video) {
   const indicator = isSessionRecording() ? REC_INDICATOR : "";
-  return `${indicator}<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`;
+  return `${indicator}<video class="stim-video" src="${videoSrc(video)}" autoplay playsinline></video>`;
 }
 
 // Recording screen: indicator, optional prompt line, optional video, then the stimulus text
 function stimulusHtml(prompt, text, video) {
   const promptHtml = prompt ? `<p class="trial-prompt">${prompt}</p>` : "";
   const videoHtml = video
-    ? `<video class="stim-video" src="${VIDEO_FOLDER}${video}" autoplay playsinline></video>`
+    ? `<video class="stim-video" src="${videoSrc(video)}" autoplay playsinline></video>`
     : "";
   const textHtml = text ? `<div class="stim-text">${text}</div>` : "";
   return `${REC_INDICATOR}${promptHtml}${videoHtml}${textHtml}`;
@@ -384,6 +390,10 @@ timeline.push({
   ],
   message: "<p>Loading videos, please wait...</p>",
   show_detailed_errors: true,
+  // Never wait forever: after 3 minutes (or on a load error) move on anyway, and any video that
+  // didn't load streams from its normal path instead. Failed files are saved in failed_video.
+  max_load_time: 180000,
+  continue_after_error: true,
 });
 
 // ---- Warm-up (playback + re-record allowed, data NOT saved) ----------
