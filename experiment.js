@@ -41,6 +41,11 @@ const WARMUP = {
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
   recording_duration_ms: 10000,
+  // Silence check: the loudest 0.1 s of the recording must reach this level (dBFS; 0 = maximum).
+  // Speech is usually around -30 to -10; a muted or wrong microphone is usually below -50.
+  silence_threshold_db: -45,
+  // After this many silent recordings in a row, participants may continue anyway (so nobody gets stuck)
+  max_silent_attempts: 3,
   // Transition screen shown after the warm-up, before the first intro video
   end_message: "<p>Thank you for checking your microphone! You are ready to begin the study.</p>",
   end_button: "Continue",
@@ -436,6 +441,32 @@ timeline.push({
 let warmupRecorder = null;
 let warmupRecordingTimer = null;
 let warmupAudio = null; // Promise resolving to the recorded Blob (null if recording failed)
+// Summary of the warm-up check, saved with the session_audio data (the warm-up audio itself is not saved)
+const warmupCheck = { attempts: 0, silent_in_a_row: 0, level_db: null, passed_silence_check: null };
+
+// Level (dBFS) of the loudest 0.1 s window of a recording; null if it can't be measured
+async function measureLoudestLevel(blob) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  const ctx = new AudioCtx();
+  try {
+    const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const samples = buffer.getChannelData(0);
+    const windowSize = Math.round(buffer.sampleRate * 0.1);
+    let loudest = 0;
+    for (let start = 0; start + windowSize <= samples.length; start += windowSize) {
+      let sum = 0;
+      for (let i = start; i < start + windowSize; i++) sum += samples[i] * samples[i];
+      loudest = Math.max(loudest, Math.sqrt(sum / windowSize));
+    }
+    return loudest > 0 ? Math.round(20 * Math.log10(loudest)) : -120;
+  } catch (error) {
+    console.warn("Could not measure the warm-up recording level:", error);
+    return null;
+  } finally {
+    ctx.close();
+  }
+}
 
 const warmupRecord = {
   type: jsPsychHtmlButtonResponse,
@@ -506,28 +537,85 @@ const warmupPlayback = {
     const [recordAgainButton, acceptButton] = display.querySelectorAll(
       "#jspsych-html-button-response-btngroup button"
     );
-    // Both buttons stay disabled until the participant starts playing the recording
+    // "Record again" unlocks once playback starts; "Sounds good" only once the whole recording has played
     recordAgainButton.disabled = true;
     acceptButton.disabled = true;
 
+    // Hovering a greyed-out button before the recording has been fully played shows a reminder.
+    // Disabled buttons don't receive mouse events, so the hover is tracked on their wrappers
+    // (the buttons ignore the pointer while disabled; see .warmup-locked in index.html).
+    let played = false;
+    const hint = document.createElement("p");
+    hint.className = "warmup-hint";
+    hint.setAttribute("role", "status");
+    hint.textContent = "Please check your audio before proceeding";
+    const buttonGroup = display.querySelector("#jspsych-html-button-response-btngroup");
+    buttonGroup.after(hint);
+    // The plugin's click handler is on the wrapper, so block clicks there while its button is disabled
+    buttonGroup.addEventListener(
+      "click",
+      (e) => {
+        const wrapper = e.target.closest(".jspsych-html-button-response-button");
+        if (wrapper && wrapper.querySelector("button").disabled) e.stopPropagation();
+      },
+      true
+    );
+    [recordAgainButton, acceptButton].forEach((button) => {
+      button.classList.add("warmup-locked");
+      const wrapper = button.parentElement;
+      wrapper.addEventListener("mouseenter", () => {
+        if (!played && button.disabled) hint.classList.add("visible");
+      });
+      wrapper.addEventListener("mouseleave", () => hint.classList.remove("visible"));
+    });
+
     const blob = await warmupAudio;
+    warmupCheck.attempts += 1;
     if (!blob || blob.size === 0) {
       status.textContent = "Recording failed. Please record again.";
+      played = true; // nothing to check; don't show the reminder
       recordAgainButton.disabled = false;
       return;
     }
+
+    // Silence check (skipped if the level can't be measured, e.g. an unsupported audio format)
+    const level = await measureLoudestLevel(blob);
+    const silent = level !== null && level < WARMUP.silence_threshold_db;
+    warmupCheck.level_db = level;
+    warmupCheck.passed_silence_check = level === null ? null : !silent;
+    warmupCheck.silent_in_a_row = silent ? warmupCheck.silent_in_a_row + 1 : 0;
+    const allowContinue = !silent || warmupCheck.silent_in_a_row >= WARMUP.max_silent_attempts;
+
+    if (silent && !allowContinue) {
+      // No need to listen to a silent recording: go straight to re-recording
+      status.innerHTML =
+        "<b>We couldn't hear anything in your recording.</b> Please check that your microphone is " +
+        "connected, not muted, and is the one your browser is using, then record again.";
+      played = true; // the status message explains what to do; don't show the reminder
+      recordAgainButton.disabled = false;
+      return;
+    }
+
     playback.addEventListener("play", () => {
+      recordAgainButton.disabled = false;
+    }, { once: true });
+    playback.addEventListener("ended", () => {
+      played = true;
+      hint.classList.remove("visible");
       recordAgainButton.disabled = false;
       acceptButton.disabled = false;
     }, { once: true });
     // If the recording can't be played, don't leave the participant stuck
     playback.addEventListener("error", () => {
       status.textContent = "Your recording could not be played. Please record again.";
+      played = true; // nothing to check; don't show the reminder
       recordAgainButton.disabled = false;
     }, { once: true });
     playback.src = URL.createObjectURL(blob);
     playback.hidden = false;
-    status.textContent = "If your audio is unclear, please adjust your setup and record again until it is clear.";
+    status.textContent = silent
+      ? "Your recording still sounds very quiet. Please listen to it; if you can hear yourself, you may continue."
+      : "Please listen to your whole recording. If your audio is unclear, adjust your setup and record again until it is clear.";
   },
   data: { task: "warmup" },
   on_finish: function (data) {
@@ -695,6 +783,10 @@ timeline.push({
   on_finish: (data) => {
     data.response = sessionAudio; // base64-encoded audio of the whole session
     data.mime_type = session.recorder ? session.recorder.mimeType : null;
+    // Warm-up check results (from the last warm-up recording)
+    data.warmup_attempts = warmupCheck.attempts;
+    data.warmup_level_db = warmupCheck.level_db;
+    data.warmup_passed_silence_check = warmupCheck.passed_silence_check;
   },
 });
 
