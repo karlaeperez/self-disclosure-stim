@@ -24,6 +24,11 @@
       .warmup-locked:disabled { pointer-events: none; } /* lets the hover reach the wrapper (see warm-up playback) */
       .warmup-hint { visibility: hidden; color: #c62828; font-size: 18px; margin: 12px 0 0; }
       .warmup-hint.visible { visibility: visible; }
+      .speak-now b { font-weight: 700; }
+      #jspsych-html-button-response-btngroup { transition: opacity 0.6s; }
+      .speak-button-hidden { opacity: 0; visibility: hidden; } /* space stays reserved so nothing jumps */
+      .text-response { max-width: 640px; margin: 0 auto 30px; text-align: left; }
+      .text-response textarea { width: 100%; box-sizing: border-box; font-size: 18px; padding: 8px; font-family: inherit; }
       @keyframes rec-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
     </style>
   </head>

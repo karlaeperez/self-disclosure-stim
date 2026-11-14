@@ -29,6 +29,19 @@ const RECAPTCHA = {
   fail_message: "<p>Sorry, we couldn't verify your browser. Please contact the researcher.</p>",
 };
 
+// ---- Hearing check (before the warm-up) ----------------------------
+// Participants play a short recording (as often as they like) and type what they heard.
+// The box unlocks once the recording has played to the end; anything typed counts.
+// The typed answer and number of plays are saved (task "audio_check").
+const AUDIO_CHECK = {
+  file: "mp3/audio-check.mp3", // relative to the HTML file
+  instructions: "<p>First, let's check that you can hear us! Please listen to this recording and then type what you heard in the box below.</p>",
+  play_button: "Play recording",
+  replay_button: "Play again",
+  placeholder: "Type what you heard",
+  continue_button: "Continue",
+};
+
 // ---- Warm-up -------------------------------------------------------
 const WARMUP = {
   instructions: `
@@ -41,11 +54,17 @@ const WARMUP = {
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
   recording_duration_ms: 10000,
-  // Silence check: the loudest 0.1 s of the recording must reach this level (dBFS; 0 = maximum).
-  // Speech is usually around -30 to -10; a muted or wrong microphone is usually below -50.
-  silence_threshold_db: -45,
-  // After this many silent recordings in a row, participants may continue anyway (so nobody gets stuck)
-  max_silent_attempts: 3,
+  // Speech check: the recording must contain at least min_speech_seconds (in total) of sound
+  // louder than speech_level_db (dBFS; 0 = maximum). Brief noises like a breath or a bump add up
+  // to much less than reading the sentence does. There is no way past the warm-up without passing.
+  // Each attempt's measurements are printed to the browser console, to help set these.
+  speech_level_db: -35,
+  min_speech_seconds: 1.0,
+  // After this many failed recordings, an extra message suggests the microphone may not be working
+  help_after_attempts: 5,
+  help_message:
+    "If you keep seeing this message, your microphone may not be working with this study. " +
+    "Please return the study on Prolific, or send us a message there if you need help.",
   // Transition screen shown after the warm-up, before the first intro video
   end_message: "<p>Thank you for checking your microphone! You are ready to begin the study.</p>",
   end_button: "Continue",
@@ -76,6 +95,9 @@ const PARTS = [
     intro_videos: ["main_adults_0.mp4", "main_adults_00.mp4", "main_adults_000.mp4"], // filenames in VIDEO_FOLDER
     end_videos: ["main_trial_END.mp4"], // played after the last trial
     trial_prompt: " ", // text above every trial
+    // speak_now: once each video ends, the recording indicator adds "speak now" and the
+    // Done Speaking button fades in (see SPEAK_BUTTON below). A stimulus can override it.
+    speak_now: true,
     randomize_order: false, 
     // Each stimulus: video = filename in VIDEO_FOLDER, text = shown under the video ("" for none)
     stimuli: [
@@ -96,7 +118,8 @@ const PARTS = [
   {
     intro_videos: ["animal_trial_0.mp4"],
     end_videos: ["animal_trial_END.mp4"],
-    trial_prompt: "Please provide one answer at a time. Click <b>Next</b> to move on.", // text above every trial
+    trial_prompt: "Please provide one answer at a time.", // text above every trial
+    speak_now: true, // see SPEAK_BUTTON below
     randomize_order: false,
     stimuli: [
       { video: "animal_trial_1.mp4", text: " "},
@@ -117,13 +140,16 @@ const PARTS = [
 
 // ---- Main-part trials ----------------------------------------------
 // One continuous recording covers all main-part trials; this button just moves to the next one.
-const TRIAL_BUTTON = "Next";
+const TRIAL_BUTTON = "Next"; // trials without speak_now: shown (disabled) during the video
+// Trials with speak_now: no button during the video; it fades in this long after the video ends
+const SPEAK_BUTTON = "Done Speaking";
+const SPEAK_BUTTON_DELAY_MS = 2000;
 
 // ====================================================================
 
 // Blinking red dot shown while the microphone is recording
 const REC_INDICATOR = `
-  <div class="rec-indicator"><span class="rec-dot"></span>Recording in progress</div>`;
+  <div class="rec-indicator"><span class="rec-dot"></span>Recording in progress<span class="speak-now" hidden>— <b>speak now</b></span></div>`;
 
 // ---- Session-level recording ---------------------------------------
 // One continuous recording, never paused: it starts when the first stimulus video starts playing
@@ -430,6 +456,71 @@ timeline.push({
   },
 });
 
+// ---- Hearing check -------------------------------------------------
+let audioCheck = { plays: 0, response: "", error: null };
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div class="instructions">${AUDIO_CHECK.instructions}</div>
+    <audio id="audio-check-audio" src="${AUDIO_CHECK.file}" preload="auto"></audio>
+    <p><button class="jspsych-btn" id="audio-check-play" type="button">${AUDIO_CHECK.play_button}</button></p>
+    <p id="audio-check-status" role="status"></p>
+    <div class="text-response">
+      <textarea id="audio-check-box" rows="2" placeholder="${AUDIO_CHECK.placeholder}" disabled></textarea>
+    </div>`,
+  choices: [AUDIO_CHECK.continue_button],
+  on_load: function () {
+    audioCheck = { plays: 0, response: "", error: null };
+    const display = jsPsych.getDisplayElement();
+    const audio = display.querySelector("#audio-check-audio");
+    const playButton = display.querySelector("#audio-check-play");
+    const status = display.querySelector("#audio-check-status");
+    const box = display.querySelector("#audio-check-box");
+    const continueButton = display.querySelector("#jspsych-html-button-response-btngroup button");
+    continueButton.disabled = true;
+
+    const unlockBox = () => {
+      if (!box.disabled) return;
+      box.disabled = false;
+      box.focus();
+    };
+    // If the recording can't be played, let them say so in the box rather than get stuck
+    const playbackFailed = (error) => {
+      audioCheck.error = error;
+      playButton.disabled = false;
+      playButton.textContent = AUDIO_CHECK.replay_button;
+      status.textContent = "The recording could not be played. Please try again, or describe the problem in the box below.";
+      unlockBox();
+    };
+
+    playButton.addEventListener("click", () => {
+      playButton.disabled = true;
+      playButton.textContent = "Playing...";
+      status.textContent = "";
+      audio.currentTime = 0;
+      audio.play().then(() => (audioCheck.plays += 1)).catch(() => playbackFailed("play-blocked"));
+    });
+    audio.addEventListener("ended", () => {
+      playButton.disabled = false;
+      playButton.textContent = AUDIO_CHECK.replay_button;
+      unlockBox();
+    });
+    audio.addEventListener("error", () => playbackFailed("load-failed"));
+    box.addEventListener("input", () => {
+      audioCheck.response = box.value;
+      continueButton.disabled = box.value.trim() === "";
+    });
+  },
+  data: { task: "audio_check" },
+  on_finish: (data) => {
+    const audio = document.querySelector("#audio-check-audio");
+    if (audio) audio.pause();
+    data.response = audioCheck.response;
+    data.audio_check_plays = audioCheck.plays;
+    data.audio_check_error = audioCheck.error;
+  },
+});
+
 // ---- Warm-up (playback + re-record allowed, data NOT saved) ----------
 timeline.push({
   type: jsPsychHtmlButtonResponse,
@@ -442,10 +533,12 @@ let warmupRecorder = null;
 let warmupRecordingTimer = null;
 let warmupAudio = null; // Promise resolving to the recorded Blob (null if recording failed)
 // Summary of the warm-up check, saved with the session_audio data (the warm-up audio itself is not saved)
-const warmupCheck = { attempts: 0, silent_in_a_row: 0, level_db: null, passed_silence_check: null };
+const warmupCheck = { attempts: 0, failed: 0, level_db: null, speech_seconds: null, passed: null };
 
-// Level (dBFS) of the loudest 0.1 s window of a recording; null if it can't be measured
-async function measureLoudestLevel(blob) {
+// Measures a recording in 0.1 s windows: level_db = level (dBFS) of the loudest window;
+// speech_seconds = total time in windows louder than WARMUP.speech_level_db.
+// Returns null if the recording can't be measured (e.g. an unsupported audio format).
+async function measureRecording(blob) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return null;
   const ctx = new AudioCtx();
@@ -454,14 +547,20 @@ async function measureLoudestLevel(blob) {
     const samples = buffer.getChannelData(0);
     const windowSize = Math.round(buffer.sampleRate * 0.1);
     let loudest = 0;
+    let loudWindows = 0;
     for (let start = 0; start + windowSize <= samples.length; start += windowSize) {
       let sum = 0;
       for (let i = start; i < start + windowSize; i++) sum += samples[i] * samples[i];
-      loudest = Math.max(loudest, Math.sqrt(sum / windowSize));
+      const rms = Math.sqrt(sum / windowSize);
+      loudest = Math.max(loudest, rms);
+      if (rms > 0 && 20 * Math.log10(rms) >= WARMUP.speech_level_db) loudWindows += 1;
     }
-    return loudest > 0 ? Math.round(20 * Math.log10(loudest)) : -120;
+    return {
+      level_db: loudest > 0 ? Math.round(20 * Math.log10(loudest)) : -120,
+      speech_seconds: Math.round(loudWindows) / 10,
+    };
   } catch (error) {
-    console.warn("Could not measure the warm-up recording level:", error);
+    console.warn("Could not measure the warm-up recording:", error);
     return null;
   } finally {
     ctx.close();
@@ -578,19 +677,28 @@ const warmupPlayback = {
       return;
     }
 
-    // Silence check (skipped if the level can't be measured, e.g. an unsupported audio format)
-    const level = await measureLoudestLevel(blob);
-    const silent = level !== null && level < WARMUP.silence_threshold_db;
-    warmupCheck.level_db = level;
-    warmupCheck.passed_silence_check = level === null ? null : !silent;
-    warmupCheck.silent_in_a_row = silent ? warmupCheck.silent_in_a_row + 1 : 0;
-    const allowContinue = !silent || warmupCheck.silent_in_a_row >= WARMUP.max_silent_attempts;
+    // Speech check. Skipped only if the recording can't be measured (e.g. an unsupported audio
+    // format), so that browser's participants aren't blocked; the full-listen rule still applies.
+    const measured = await measureRecording(blob);
+    const passed = measured === null ? null : measured.speech_seconds >= WARMUP.min_speech_seconds;
+    warmupCheck.level_db = measured ? measured.level_db : null;
+    warmupCheck.speech_seconds = measured ? measured.speech_seconds : null;
+    warmupCheck.passed = passed;
+    console.info(`Warm-up check, attempt ${warmupCheck.attempts}:`, {
+      loudest_db: warmupCheck.level_db,
+      speech_seconds: warmupCheck.speech_seconds,
+      passed,
+      needed: `${WARMUP.min_speech_seconds} s above ${WARMUP.speech_level_db} dB`,
+    });
 
-    if (silent && !allowContinue) {
-      // No need to listen to a silent recording: go straight to re-recording
+    if (passed === false) {
+      // No way forward until a recording passes; no need to listen to a failed one
+      warmupCheck.failed += 1;
       status.innerHTML =
-        "<b>We couldn't hear anything in your recording.</b> Please check that your microphone is " +
-        "connected, not muted, and is the one your browser is using, then record again.";
+        "<b>We couldn't hear you clearly in your recording.</b> Please check that your microphone is " +
+        "connected, not muted, and is the one your browser is using. Then record again, reading the " +
+        "sentence out loud in your normal speaking voice." +
+        (warmupCheck.failed >= WARMUP.help_after_attempts ? `<br><br>${WARMUP.help_message}` : "");
       played = true; // the status message explains what to do; don't show the reminder
       recordAgainButton.disabled = false;
       return;
@@ -613,9 +721,8 @@ const warmupPlayback = {
     }, { once: true });
     playback.src = URL.createObjectURL(blob);
     playback.hidden = false;
-    status.textContent = silent
-      ? "Your recording still sounds very quiet. Please listen to it; if you can hear yourself, you may continue."
-      : "Please listen to your whole recording. If your audio is unclear, adjust your setup and record again until it is clear.";
+    status.textContent =
+      "Please listen to your whole recording. If your audio is unclear, adjust your setup and record again until it is clear.";
   },
   data: { task: "warmup" },
   on_finish: function (data) {
@@ -695,19 +802,45 @@ function buildPart(part, partNumber) {
   let trialStart = null;
   let videoOnset = null;
   let videoEnd = null;
+  let doneButtonShown = null;
+
+  // Speak-now trials: hide the button during the video; when the video ends, add "speak now" to the
+  // recording indicator, then fade the button in SPEAK_BUTTON_DELAY_MS later
+  function setUpSpeakNow(video) {
+    const display = jsPsych.getDisplayElement();
+    const speakNow = display.querySelector(".speak-now");
+    const buttonGroup = display.querySelector("#jspsych-html-button-response-btngroup");
+    buttonGroup.classList.add("speak-button-hidden");
+    let started = false;
+    const videoDone = () => {
+      if (started) return;
+      started = true;
+      if (speakNow) speakNow.hidden = false;
+      // jsPsych timeouts are cleared when the trial ends
+      jsPsych.pluginAPI.setTimeout(() => {
+        buttonGroup.classList.remove("speak-button-hidden");
+        doneButtonShown = performance.now();
+      }, SPEAK_BUTTON_DELAY_MS);
+    };
+    if (!video) return videoDone();
+    video.addEventListener("ended", videoDone, { once: true });
+    video.addEventListener("error", videoDone, { once: true }); // don't leave the participant stuck
+  }
 
   const recording = {
     type: jsPsychHtmlButtonResponse,
     stimulus: () =>
       stimulusHtml(part.trial_prompt, jsPsych.timelineVariable("text"), jsPsych.timelineVariable("video")),
-    choices: [TRIAL_BUTTON],
+    choices: () => [jsPsych.timelineVariable("speak_now") ? SPEAK_BUTTON : TRIAL_BUTTON],
     on_load: () => {
       trialStart = performance.now();
       videoOnset = null;
       videoEnd = null;
+      doneButtonShown = null;
       // "Next" stays disabled until the video has finished; a blocked autoplay
       // must not stop the session recording from starting
       const video = playVideoWithLockedButtons(startSessionRecording);
+      if (jsPsych.timelineVariable("speak_now", true)) setUpSpeakNow(video); // true: read the value now
       if (!video) {
         startSessionRecording();
         return;
@@ -727,6 +860,7 @@ function buildPart(part, partNumber) {
       part: partNumber,
       text: jsPsych.timelineVariable("text"),
       video: jsPsych.timelineVariable("video"),
+      speak_now: jsPsych.timelineVariable("speak_now"),
       stimulus_index: jsPsych.timelineVariable("index"),
     },
   };
@@ -740,12 +874,18 @@ function buildPart(part, partNumber) {
     data.trial_start_ms = sessionTime(trialStart);
     data.video_onset_ms = sessionTime(videoOnset);
     data.video_end_ms = sessionTime(videoEnd); // null only if the video failed to play
+    data.done_button_shown_ms = sessionTime(doneButtonShown); // null on trials without speak_now
     data.trial_end_ms = sessionTime(performance.now());
   };
 
   const trials = {
     timeline: [recording],
-    timeline_variables: part.stimuli.map((stim, index) => ({ text: stim.text, video: stim.video, index })),
+    timeline_variables: part.stimuli.map((stim, index) => ({
+      text: stim.text,
+      video: stim.video,
+      speak_now: stim.speak_now ?? part.speak_now ?? false,
+      index,
+    })),
     randomize_order: part.randomize_order,
   };
 
@@ -785,8 +925,10 @@ timeline.push({
     data.mime_type = session.recorder ? session.recorder.mimeType : null;
     // Warm-up check results (from the last warm-up recording)
     data.warmup_attempts = warmupCheck.attempts;
+    data.warmup_failed_attempts = warmupCheck.failed;
     data.warmup_level_db = warmupCheck.level_db;
-    data.warmup_passed_silence_check = warmupCheck.passed_silence_check;
+    data.warmup_speech_seconds = warmupCheck.speech_seconds;
+    data.warmup_passed_speech_check = warmupCheck.passed; // null if it couldn't be measured
   },
 });
 
@@ -837,12 +979,12 @@ timeline.push({
     jsPsych.getDisplayElement().innerHTML =
       "<p>Saving your data. Please do not close this page.</p>";
 
-    // reCAPTCHA result, video loading info, main-part trials and session info (warm-up and instruction screens are excluded).
+    // reCAPTCHA result, hearing check, video loading info, main-part trials and session info (warm-up and instruction screens are excluded).
     // The audio itself is left out since it is uploaded as its own file.
     const dataString = JSON.stringify(
       jsPsych.data
         .get()
-        .filterCustom((trial) => ["recaptcha", "video_wait", "recording", "session_audio"].includes(trial.task))
+        .filterCustom((trial) => ["recaptcha", "audio_check", "video_wait", "recording", "session_audio"].includes(trial.task))
         .values()
         .map((trial) => (trial.task === "session_audio" ? { ...trial, response: null } : trial))
     );
