@@ -79,9 +79,9 @@ const WARMUP = {
 };
 
 // ---- Video stimuli -------------------------------------------------
-// Folder in the GitHub repo where the mp4 files are stored (relative to the HTML file)
-// This copy lives in other-descriptions/, so it points to the shared mp4 folder one level up
-const VIDEO_FOLDER = "../mp4/other-descriptions/";
+// The shared mp4 folder is one level up from this study's folder. Each video filename below
+// includes its subfolder: self/, others/ or animals/ (e.g. "animals/animal_trial_1.mp4").
+const VIDEO_FOLDER = "../mp4/";
 
 // ---- Intro videos --------------------------------------------------
 // Each part can list intro videos (intro_videos below) that play in order before its trials.
@@ -102,54 +102,54 @@ const END_BUTTON = "Continue";
 const PARTS = [
   {
     // No intro videos: the former welcome videos are the first trials below, so recording starts with them
-    intro_videos: [], // filenames in VIDEO_FOLDER
-    end_videos: ["main_trial_END.mp4"], // played after the last trial
+    intro_videos: [], // paths inside VIDEO_FOLDER
+    end_videos: ["others/others-main-END.mp4"], // played after the last trial
     trial_prompt: " ", // text above every trial
     // speak_now: once each video ends, the recording indicator adds "speak now" and the
     // Done Speaking button fades in (see SPEAK_BUTTON below). A stimulus can override it.
     speak_now: true,
     randomize_order: false, 
-    // Each stimulus: video = filename in VIDEO_FOLDER, text = shown under the video ("" for none)
+    // Each stimulus: video = path inside VIDEO_FOLDER, text = shown under the video ("" for none)
     // Optional text_question: adds a text box under the video with this question above it. The box
     // appears once the video has finished, and Next stays disabled until something is typed.
     // The answer is saved as text_response in that trial's data.
     stimuli: [
-      { video: "placeholder-pt1.mp4", text: " " },
-      { video: "placeholder-pt2.mp4", text: " ", speak_now: false },
-      { video: "placeholder-pt3.mp4", text: " ", speak_now: false },
-      { video: "placeholder-trial1.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial2.mp4", text: " " },
-      { video: "placeholder-trial12.mp4", text: " " },
+      { video: "others/others-intro-0.mp4", text: " " },
+      { video: "others/others-intro-00.mp4", text: " ", speak_now: false },
+      { video: "others/others-intro-000.mp4", text: " ", speak_now: false },
+      { video: "others/others-main-1.mp4", text: " " },
+      { video: "others/others-main-2.mp4", text: " " },
+      { video: "others/others-main-3.mp4", text: " " },
+      { video: "others/others-main-4.mp4", text: " " },
+      { video: "others/others-main-5.mp4", text: " " },
+      { video: "others/others-main-6.mp4", text: " " },
+      { video: "others/others-main-7.mp4", text: " " },
+      { video: "others/others-main-8.mp4", text: " " },
+      { video: "others/others-main-9.mp4", text: " " },
+      { video: "others/others-main-10.mp4", text: " " },
+      { video: "others/others-main-11.mp4", text: " " },
+      { video: "others/others-main-12.mp4", text: " " },
     ],
   },
   {
-    intro_videos: ["animal_trial_0.mp4"],
-    end_videos: ["animal_trial_END.mp4"],
+    intro_videos: ["animals/animal_trial_0.mp4"],
+    end_videos: ["animals/animal_trial_END.mp4"],
     trial_prompt: "Please provide one answer at a time.", // text above every trial
     speak_now: true, // see SPEAK_BUTTON below
     randomize_order: false,
     stimuli: [
-      { video: "animal_trial_1.mp4", text: " "},
-      { video: "animal_trial_2.mp4", text: " " },
-      { video: "animal_trial_3.mp4", text: " " },
-      { video: "animal_trial_4.mp4", text: " " },
-      { video: "animal_trial_5.mp4", text: " " },
-      { video: "animal_trial_6.mp4", text: " " },
-      { video: "animal_trial_7.mp4", text: " " },
-      { video: "animal_trial_8.mp4", text: " " },
-      { video: "animal_trial_9.mp4", text: " " },
-      { video: "animal_trial_10.mp4", text: " " },
-      { video: "animal_trial_11.mp4", text: " " },
-      { video: "animal_trial_12.mp4", text: " " },
+      { video: "animals/animal_trial_1.mp4", text: " "},
+      { video: "animals/animal_trial_2.mp4", text: " " },
+      { video: "animals/animal_trial_3.mp4", text: " " },
+      { video: "animals/animal_trial_4.mp4", text: " " },
+      { video: "animals/animal_trial_5.mp4", text: " " },
+      { video: "animals/animal_trial_6.mp4", text: " " },
+      { video: "animals/animal_trial_7.mp4", text: " " },
+      { video: "animals/animal_trial_8.mp4", text: " " },
+      { video: "animals/animal_trial_9.mp4", text: " " },
+      { video: "animals/animal_trial_10.mp4", text: " " },
+      { video: "animals/animal_trial_11.mp4", text: " " },
+      { video: "animals/animal_trial_12.mp4", text: " " },
     ],
   },
 ];
