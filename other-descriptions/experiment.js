@@ -7,10 +7,10 @@
 // ====================================================================
 
 // ---- Data saving (DataPipe -> GDrive) ---------------------------------
-// DISABLED in this template: set to true (and fill in a new experiment ID) to save data again
-const DATAPIPE_ENABLED = false;
-// Experiment ID from pipe.jspsych.org (create a new experiment for this study)
-const DATAPIPE_EXPERIMENT_ID = "";
+// Set to false for local testing: nothing is uploaded and the data is printed to the console instead
+const DATAPIPE_ENABLED = true;
+// Experiment ID from pipe.jspsych.org (this study's own experiment, separate from self-descriptions)
+const DATAPIPE_EXPERIMENT_ID = "fuKW1nrzslnK";
 // Shown only if an upload fails after retrying; the participant can then download their files
 const UPLOAD_FAILED_MESSAGE = `
   <p>Sorry, we couldn't save your data to our server.</p>
@@ -18,10 +18,10 @@ const UPLOAD_FAILED_MESSAGE = `
      You will still be credited for completing the study.</p>`;
 
 // ---- Prolific ------------------------------------------------------
-// DISABLED in this template: set to true (and update the completion code) to redirect again
-const PROLIFIC_REDIRECT_ENABLED = false;
-// Participants are sent here at the end of the study
-const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=CJG2TUCF";
+// Set to false for local testing: the study ends on a thank-you screen instead of redirecting
+const PROLIFIC_REDIRECT_ENABLED = true;
+// Participants are sent here at the end of the study (this study's own completion code)
+const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=CZAGQLAT";
 
 // ---- reCAPTCHA (bot check, first screen of the study) --------------
 // Same site key and verifier (Cloudflare Worker) as the self-descriptions study.
@@ -1000,7 +1000,7 @@ const DATAPIPE_URL = "https://pipe.jspsych.org/api";
 const UPLOAD_ATTEMPTS = 3;
 
 // Random suffix so a participant who restarts doesn't hit DataPipe's duplicate-filename rejection
-const fileBase = `voice_study_${pid}_${jsPsych.randomization.randomID(6)}`;
+const fileBase = `other_descriptions_${pid}_${jsPsych.randomization.randomID(6)}`;
 
 function audioExtension(mimeType) {
   if (!mimeType) return "webm";
