@@ -24,10 +24,10 @@ const PROLIFIC_REDIRECT_ENABLED = false;
 const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=CJG2TUCF";
 
 // ---- reCAPTCHA (bot check, first screen of the study) --------------
-// DISABLED in this template: to re-enable, set enabled to true and restore the
-// reCAPTCHA <script> tag in index.html
+// Same site key and verifier (Cloudflare Worker) as the self-descriptions study.
+// To turn it off: set enabled to false and comment out the reCAPTCHA <script> tag in index.html
 const RECAPTCHA = {
-  enabled: false,
+  enabled: true,
   site_key: "6LcbqQ4uAAAAAPxvFgouL1OUQKPUN0G7flu2jHq3", // public key from Google Cloud
   verify_url: "https://recaptcha-verify.perezke.workers.dev", // Cloudflare Worker (recaptcha-worker.js)
   // false = participants who fail verification continue and are flagged (recaptcha_passed in the data)

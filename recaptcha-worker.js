@@ -5,9 +5,25 @@
  * the secret RECAPTCHA_SECRET, never in this file.
  * ------------------------------------------------------------------ */
 
-// Only the study's site (and local testing) may use this verifier
-const STUDY_HOSTNAME = "karlaeperez.github.io";
-const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+// Only the study's sites (and local testing) may use this verifier.
+// voice-study.pages.dev also covers its preview/deployment addresses (e.g. abc123.voice-study.pages.dev).
+// karlaeperez.github.io can be removed once GitHub Pages is turned off.
+const STUDY_HOSTNAMES = ["voice-study.pages.dev", "karlaeperez.github.io"];
+const LOCAL_HOSTNAMES = ["localhost", "127.0.0.1"];
+
+function isStudyHost(hostname) {
+  return STUDY_HOSTNAMES.some((h) => hostname === h || hostname.endsWith(`.${h}`));
+}
+
+function isAllowedOrigin(origin) {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (protocol === "https:" && isStudyHost(hostname)) return true;
+    return protocol === "http:" && LOCAL_HOSTNAMES.includes(hostname);
+  } catch (err) {
+    return false; // missing or malformed Origin header
+  }
+}
 
 function json(body, status, headers) {
   return new Response(JSON.stringify(body), {
@@ -19,9 +35,9 @@ function json(body, status, headers) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
-    const allowed = origin === `https://${STUDY_HOSTNAME}` || LOCAL_ORIGIN.test(origin);
+    const allowed = isAllowedOrigin(origin);
     const cors = {
-      "Access-Control-Allow-Origin": allowed ? origin : `https://${STUDY_HOSTNAME}`,
+      "Access-Control-Allow-Origin": allowed ? origin : `https://${STUDY_HOSTNAMES[0]}`,
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       Vary: "Origin",
@@ -50,8 +66,9 @@ export default {
     });
     const result = await google.json();
 
-    // Also require the checkbox to have been solved on the study's site
-    const hostOk = [STUDY_HOSTNAME, "localhost", "127.0.0.1"].includes(result.hostname);
+    // Also require the checkbox to have been solved on one of the study's sites
+    const solvedOn = result.hostname || "";
+    const hostOk = isStudyHost(solvedOn) || LOCAL_HOSTNAMES.includes(solvedOn);
     return json(
       { success: result.success === true && hostOk, error_codes: result["error-codes"] || [] },
       200,
