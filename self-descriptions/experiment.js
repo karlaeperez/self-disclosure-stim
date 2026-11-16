@@ -644,7 +644,8 @@ const warmupPlayback = {
     const [recordAgainButton, acceptButton] = display.querySelectorAll(
       "#jspsych-html-button-response-btngroup button"
     );
-    // "Record again" unlocks once playback starts; "Sounds good" only once the whole recording has played
+    // Both buttons unlock only once the whole recording has played (or right away for "Record again"
+    // if there is nothing to listen to: the recording failed, failed the speech check, or can't play)
     recordAgainButton.disabled = true;
     acceptButton.disabled = true;
 
@@ -712,9 +713,6 @@ const warmupPlayback = {
       return;
     }
 
-    playback.addEventListener("play", () => {
-      recordAgainButton.disabled = false;
-    }, { once: true });
     playback.addEventListener("ended", () => {
       played = true;
       hint.classList.remove("visible");
