@@ -45,8 +45,8 @@ const AUDIO_CHECK = {
 // ---- Warm-up -------------------------------------------------------
 const WARMUP = {
   instructions: `
-    <h2>Warm-up</h2>
-    <p>Let's start with a practice voice recording so you can check your audio.</p>
+    <h2>Warm-up: practice providing your verbal response</h2>
+    <p>Now, let's practice recording your voice so you can check your audio.</p>
     <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b>. Please listen to your recording and
        re-record until it sounds clear.</p>
        <p>The recording will start automatically, right after you click <b>Continue</b> down below.</p>`,
@@ -169,7 +169,8 @@ function isSessionRecording() {
 
 function startSessionRecording() {
   if (session.recorder) return;
-  // 64 kbps is plenty for speech and keeps long sessions under DataPipe's 32 MB upload limit
+  // 64 kbps is plenty for speech (about 0.5 MB per minute). The file is uploaded in pieces;
+  // see AUDIO_PIECE_BYTES.
   session.recorder = new MediaRecorder(micStream, { audioBitsPerSecond: 64000 });
   session.recorder.ondataavailable = (e) => {
     if (e.data.size > 0) session.chunks.push(e.data);
@@ -924,6 +925,10 @@ timeline.push({
   on_finish: (data) => {
     data.response = sessionAudio; // base64-encoded audio of the whole session
     data.mime_type = session.recorder ? session.recorder.mimeType : null;
+    // The audio is uploaded in pieces; audio_file is the name to give the rejoined recording
+    const ext = audioExtension(session.recorder?.mimeType || "audio/webm");
+    data.audio_file = sessionAudio ? `${fileBase}.${ext}` : null;
+    data.audio_pieces = sessionAudio ? splitBase64(sessionAudio, AUDIO_PIECE_BYTES).length : 0;
     // Warm-up check results (from the last warm-up recording)
     data.warmup_attempts = warmupCheck.attempts;
     data.warmup_failed_attempts = warmupCheck.failed;
@@ -970,6 +975,49 @@ async function uploadToDataPipe(endpoint, filename, dataString) {
   return false;
 }
 
+// ---- Audio upload in pieces ----------------------------------------
+// DataPipe rejects audio uploads larger than about 2-3 MB (tested Nov 2026: 2 MB was accepted,
+// 3.4 MB was not; that is roughly 4-7 minutes of recording), so the session audio is uploaded in
+// pieces of at most AUDIO_PIECE_BYTES. The pieces are consecutive slices of the bytes of the one
+// recording, named <file name>_part01of09.webm, ..._part02of09.webm, etc. Joining them in order
+// gives back the exact original file, e.g.:
+//   cat <file name>_part*.webm > <file name>.webm
+// Only part 1 plays on its own. The data file's session_audio row lists audio_file and audio_pieces.
+const AUDIO_PIECE_BYTES = 1024 * 1024; // 1 MB
+const AUDIO_UPLOAD_PARALLEL = 3; // pieces uploading at once
+
+// Splits base64 text into pieces that each decode to at most maxBytes bytes. Cuts fall on
+// multiples of 4 characters (= 3 bytes), so each piece decodes on its own to a consecutive
+// slice of the original bytes.
+function splitBase64(base64, maxBytes) {
+  const pieceLength = Math.floor(maxBytes / 3) * 4;
+  const pieces = [];
+  for (let i = 0; i < base64.length; i += pieceLength) pieces.push(base64.slice(i, i + pieceLength));
+  return pieces;
+}
+
+// e.g. <file name>_part03of12.webm (zero-padded so the pieces sort in order)
+function audioPieceName(index, total, ext) {
+  const width = Math.max(2, String(total).length);
+  const pad = (n) => String(n).padStart(width, "0");
+  return `${fileBase}_part${pad(index + 1)}of${pad(total)}.${ext}`;
+}
+
+// Resolves true once every piece has been accepted (each piece is retried by uploadToDataPipe)
+async function uploadAudioPieces(pieces, ext) {
+  let next = 0;
+  let allUploaded = true;
+  const worker = async () => {
+    while (allUploaded && next < pieces.length) {
+      const i = next++;
+      const name = audioPieceName(i, pieces.length, ext);
+      if (!(await uploadToDataPipe("base64", name, pieces[i]))) allUploaded = false;
+    }
+  };
+  await Promise.all(Array.from({ length: AUDIO_UPLOAD_PARALLEL }, worker));
+  return allUploaded;
+}
+
 // Files that could not be uploaded; offered as downloads on the fallback screen
 const failedUploads = [];
 
@@ -994,13 +1042,14 @@ timeline.push({
       failedUploads.push({ filename: dataFile, blob: new Blob([dataString], { type: "application/json" }) });
     }
 
-    // Skipped if nothing was recorded
+    // Skipped if nothing was recorded. Uploaded in pieces (see AUDIO_PIECE_BYTES); if any piece
+    // can't be uploaded, the participant is offered the complete recording to download instead.
     if (sessionAudio) {
       const mimeType = session.recorder?.mimeType || "audio/webm";
-      const audioFile = `${fileBase}.${audioExtension(mimeType)}`;
-      if (!(await uploadToDataPipe("base64", audioFile, sessionAudio))) {
+      const ext = audioExtension(mimeType);
+      if (!(await uploadAudioPieces(splitBase64(sessionAudio, AUDIO_PIECE_BYTES), ext))) {
         const blob = await (await fetch(`data:${mimeType};base64,${sessionAudio}`)).blob();
-        failedUploads.push({ filename: audioFile, blob });
+        failedUploads.push({ filename: `${fileBase}.${ext}`, blob });
       }
     }
     done({ upload_failed: failedUploads.map((f) => f.filename) });
