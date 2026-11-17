@@ -119,13 +119,13 @@ const PARTS = [
   {
     // intro_message: text screen shown before this part's intro videos (optional)
     intro_message: `
-      <p>Thank you for sharing about yourself!<br>Before we let you go, we have a quick word game for you to complete.</p>
+      <p><b>Thank you for sharing about yourself!</b><br>Before you go, we have a quick word game for you to complete.</p>
       <p>In this new task, we'll give you a category and ask you to name the first 12 members of that category you can think of.<br>
       Please provide one answer at a time.</p>
-      <p>For example, if the category is 'fruit', then you might say 'apple', press “Done Speaking” to move to the next question, and then say 'banana', and so on.</p>`,
+      <p>For example, if the category is 'fruit', then you might say 'apple', move to the next question, and then say 'banana', and so on.</p>`,
     intro_videos: ["animals/animal_trial_0.mp4"],
     end_videos: ["animals/animal_trial_END.mp4"],
-    trial_prompt: "Please provide one answer at a time.", // text above every trial
+    trial_prompt: " ", // text above every trial
     speak_now: true, // see SPEAK_BUTTON below
     randomize_order: false,
     stimuli: [
