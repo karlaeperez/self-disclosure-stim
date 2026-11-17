@@ -134,14 +134,15 @@ const PARTS = [
   {
     // intro_message: text screen shown before this part's intro videos (optional)
     intro_message: `
-      <p><b>Thank you for sharing about your relative!</b><br>Before you go, we have a quick word game for you to complete.</p>
-      <p>In this new task, we'll give you a category and ask you to name the first 12 members of that category you can think of.<br>
-      Please provide one answer at a time.</p>
+      <p><b>Thank you for sharing about your relative!</b></p>
+      <p>Before you go, we have a quick word game for you to complete.</p>
+      <p>In this new task, we'll give you a category and ask you to name the first 12 members of that category you can think of. <b>Please provide one answer at a time.</b></p>
       <p>For example, if the category is 'fruit', then you might say 'apple', move to the next question, and then say 'banana', and so on.</p>`,
     intro_videos: ["animals/animal_trial_0.mp4"],
     end_videos: ["animals/animal_trial_END.mp4"],
     trial_prompt: " ", // text above every trial
     speak_now: true, // see SPEAK_BUTTON below
+    speak_button_delay_ms: 1000, // Done Speaking fades in sooner here (default: SPEAK_BUTTON_DELAY_MS)
     randomize_order: false,
     stimuli: [
       { video: "animals/animal_trial_1.mp4", text: " "},
@@ -165,7 +166,7 @@ const PARTS = [
 const TRIAL_BUTTON = "Next"; // trials without speak_now: shown (disabled) during the video
 // Trials with speak_now: no button during the video; it fades in this long after the video ends
 const SPEAK_BUTTON = "Done Speaking";
-const SPEAK_BUTTON_DELAY_MS = 2000;
+const SPEAK_BUTTON_DELAY_MS = 2000; // a part can set its own with speak_button_delay_ms
 
 // ====================================================================
 
@@ -836,7 +837,8 @@ function buildPart(part, partNumber) {
   let doneButtonShown = null;
 
   // Speak-now trials: hide the button during the video; when the video ends, add "speak now" to the
-  // recording indicator, then fade the button in SPEAK_BUTTON_DELAY_MS later
+  // recording indicator, then fade the button in after the part's delay
+  const speakButtonDelay = part.speak_button_delay_ms ?? SPEAK_BUTTON_DELAY_MS;
   function setUpSpeakNow(video) {
     const display = jsPsych.getDisplayElement();
     const speakNow = display.querySelector(".speak-now");
@@ -851,7 +853,7 @@ function buildPart(part, partNumber) {
       jsPsych.pluginAPI.setTimeout(() => {
         buttonGroup.classList.remove("speak-button-hidden");
         doneButtonShown = performance.now();
-      }, SPEAK_BUTTON_DELAY_MS);
+      }, speakButtonDelay);
     };
     if (!video) return videoDone();
     video.addEventListener("ended", videoDone, { once: true });
