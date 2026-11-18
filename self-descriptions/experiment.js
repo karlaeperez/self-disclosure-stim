@@ -102,7 +102,7 @@ const PARTS = [
     randomize_order: false, 
     // Each stimulus: video = path inside VIDEO_FOLDER, text = shown under the video ("" for none)
     stimuli: [
-      { video: "self/main_adults_1.mp4", text: " " },
+      { video: "self/main_trial_1.mp4", text: " " },
       { video: "self/main_trial_2.mp4", text: " " },
       { video: "self/main_trial_3.mp4", text: " " },
       { video: "self/main_trial_4.mp4", text: " " },
