@@ -47,7 +47,7 @@ const WARMUP = {
   instructions: `
     <h2>Warm-up: practice providing your verbal response</h2>
     <p>Now, let's practice recording your voice so you can check your audio.</p>
-    <p>Read the sentence in the following screen aloud. Once you are done, click <b>Continue</b>. Please listen to your recording and
+    <p>Read the sentence in the following screen aloud. Once you are done, click <b>Done Speaking</b>. Please listen to your recording and
        re-record until it sounds clear.</p>
        <p>The recording will start automatically, right after you click <b>Continue</b> down below.</p>`,
   start_button: `Continue (Start Recording<span class="btn-rec-dot"></span>)`,
@@ -580,8 +580,13 @@ const warmupRecord = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `${stimulusHtml(WARMUP.trial_prompt, WARMUP.text)}
     <p id="warmup-status" role="status">Recording your practice audio...</p>`,
-  choices: ["Continue"],
+  choices: [SPEAK_BUTTON],
   on_load: function () {
+    // Same as the trials: the Done Speaking button fades in SPEAK_BUTTON_DELAY_MS after the screen appears
+    const buttonGroup = jsPsych.getDisplayElement().querySelector("#jspsych-html-button-response-btngroup");
+    buttonGroup.classList.add("speak-button-hidden");
+    jsPsych.pluginAPI.setTimeout(() => buttonGroup.classList.remove("speak-button-hidden"), SPEAK_BUTTON_DELAY_MS);
+
     const mimeTypes = [
       "audio/mp4;codecs=mp4a.40.2",
       "audio/mp4",
