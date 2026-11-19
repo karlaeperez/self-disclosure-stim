@@ -11,9 +11,15 @@
 const DATAPIPE_EXPERIMENT_ID = "r6xeXGMfXPhn";
 // Shown only if an upload fails after retrying; the participant can then download their files
 const UPLOAD_FAILED_MESSAGE = `
-  <p>Sorry, we couldn't save your data to our server.</p>
-  <p>Please click <b>Download my data</b> and send the downloaded files to us through a Prolific message.
-     You will still be credited for completing the study.</p>`;
+  <p>Sorry, we couldn't save your data to our server. This is usually a temporary connection problem.</p>
+  <p>Please check your internet connection and click <b>Try again</b>.</p>`;
+// Shown if trying again also fails (Prolific messages can't carry attachments, so files are emailed)
+const UPLOAD_EMAIL_MESSAGE = `
+  <p>Please click <b>Download my data</b> and email the downloaded files to
+     <a href="mailto:sociallearninglab@stanford.edu">sociallearninglab@stanford.edu</a>.
+     We will only use your email address to receive these files.
+     You will still be credited for completing the study.</p>
+  <p>Once you have downloaded your files, click <b>Continue to Prolific</b>.</p>`;
 
 // ---- Prolific ------------------------------------------------------
 // Participants are sent here at the end of the study
@@ -1045,22 +1051,24 @@ function audioPieceName(index, total, ext) {
   return `${fileBase}_part${pad(index + 1)}of${pad(total)}.${ext}`;
 }
 
-// Resolves true once every piece has been accepted (each piece is retried by uploadToDataPipe)
-async function uploadAudioPieces(pieces, ext) {
+// Resolves true once every piece has been accepted (each piece is retried by uploadToDataPipe).
+// `uploaded` collects the numbers of the accepted pieces, so trying again only sends the missing ones.
+async function uploadAudioPieces(pieces, ext, uploaded = new Set()) {
+  const missing = pieces.map((_, i) => i).filter((i) => !uploaded.has(i));
   let next = 0;
   let allUploaded = true;
   const worker = async () => {
-    while (allUploaded && next < pieces.length) {
-      const i = next++;
-      const name = audioPieceName(i, pieces.length, ext);
-      if (!(await uploadToDataPipe("base64", name, pieces[i]))) allUploaded = false;
+    while (allUploaded && next < missing.length) {
+      const i = missing[next++];
+      if (await uploadToDataPipe("base64", audioPieceName(i, pieces.length, ext), pieces[i])) uploaded.add(i);
+      else allUploaded = false;
     }
   };
   await Promise.all(Array.from({ length: AUDIO_UPLOAD_PARALLEL }, worker));
   return allUploaded;
 }
 
-// Files that could not be uploaded; offered as downloads on the fallback screen
+// Files that could not be uploaded: { filename, blob (offered as a download), retry (tries the upload again) }
 const failedUploads = [];
 
 timeline.push({
@@ -1081,7 +1089,11 @@ timeline.push({
     );
     const dataFile = `${fileBase}.json`;
     if (!(await uploadToDataPipe("data", dataFile, dataString))) {
-      failedUploads.push({ filename: dataFile, blob: new Blob([dataString], { type: "application/json" }) });
+      failedUploads.push({
+        filename: dataFile,
+        blob: new Blob([dataString], { type: "application/json" }),
+        retry: () => uploadToDataPipe("data", dataFile, dataString),
+      });
     }
 
     // Skipped if nothing was recorded. Uploaded in pieces (see AUDIO_PIECE_BYTES); if any piece
@@ -1089,9 +1101,11 @@ timeline.push({
     if (sessionAudio) {
       const mimeType = session.recorder?.mimeType || "audio/webm";
       const ext = audioExtension(mimeType);
-      if (!(await uploadAudioPieces(splitBase64(sessionAudio, AUDIO_PIECE_BYTES), ext))) {
+      const pieces = splitBase64(sessionAudio, AUDIO_PIECE_BYTES);
+      const uploaded = new Set();
+      if (!(await uploadAudioPieces(pieces, ext, uploaded))) {
         const blob = await (await fetch(`data:${mimeType};base64,${sessionAudio}`)).blob();
-        failedUploads.push({ filename: `${fileBase}.${ext}`, blob });
+        failedUploads.push({ filename: `${fileBase}.${ext}`, blob, retry: () => uploadAudioPieces(pieces, ext, uploaded) });
       }
     }
     done({ upload_failed: failedUploads.map((f) => f.filename) });
@@ -1099,18 +1113,45 @@ timeline.push({
   data: { task: "upload" },
 });
 
-// Only shown if an upload failed: let the participant download the files and send them to us
+// Only shown if an upload failed. The participant first tries the upload again (most failures are
+// brief connection problems). If that fails too, they download the files and email them to us.
+// Continue stays disabled until the data is saved or downloaded.
 timeline.push({
   timeline: [
     {
       type: jsPsychHtmlButtonResponse,
-      stimulus: `<div class="instructions">${UPLOAD_FAILED_MESSAGE}</div>
-        <p><button class="jspsych-btn" id="download-data" type="button">Download my data</button></p>`,
+      stimulus: `<div class="instructions" id="upload-failed-message">${UPLOAD_FAILED_MESSAGE}</div>
+        <p><button class="jspsych-btn" id="retry-upload" type="button">Try again</button></p>
+        <p id="retry-status" role="status"></p>
+        <div id="upload-email" hidden>
+          <div class="instructions">${UPLOAD_EMAIL_MESSAGE}</div>
+          <p><button class="jspsych-btn" id="download-data" type="button">Download my data</button></p>
+        </div>`,
       choices: ["Continue to Prolific"],
       on_load: function () {
         const display = jsPsych.getDisplayElement();
         const continueButton = display.querySelector("#jspsych-html-button-response-btngroup button");
+        const retryButton = display.querySelector("#retry-upload");
+        const status = display.querySelector("#retry-status");
         continueButton.disabled = true;
+        retryButton.addEventListener("click", async () => {
+          retryButton.disabled = true;
+          status.textContent = "Saving your data. Please do not close this page.";
+          for (const file of [...failedUploads]) {
+            if (await file.retry()) failedUploads.splice(failedUploads.indexOf(file), 1);
+          }
+          if (failedUploads.length === 0) {
+            display.querySelector("#upload-failed-message").hidden = true;
+            display.querySelector("#upload-email").hidden = true;
+            retryButton.hidden = true;
+            status.innerHTML = "<b>Your data has been saved. Thank you!</b>";
+            continueButton.disabled = false;
+          } else {
+            status.innerHTML = "<b>Sorry, we still couldn't save your data.</b> You can try again, or follow the instructions below.";
+            display.querySelector("#upload-email").hidden = false;
+            retryButton.disabled = false;
+          }
+        });
         display.querySelector("#download-data").addEventListener("click", () => {
           failedUploads.forEach(({ filename, blob }) => {
             const link = document.createElement("a");
