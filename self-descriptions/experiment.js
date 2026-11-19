@@ -386,6 +386,26 @@ timeline.push({
   },
 });
 
+// ---- Consent -------------------------------------------------------
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div class="consent-box">
+      <p>By agreeing to take part in this research, you agree to participate in our descriptions task. This
+         experiment will take approximately 8 minutes to complete.</p>
+      <p>By answering the following questions, you are participating in a study being performed by cognitive
+         scientists in the Stanford Department of Psychology. If you have questions about this research, please
+         contact us at <a href="mailto:sociallearninglab@stanford.edu">sociallearninglab@stanford.edu</a>.</p>
+      <p>You must be at least 18 years old to participate. Your participation in this research is voluntary. You may
+         decline to answer any or all of the following questions. You may decline further participation, at any time,
+         without adverse consequences. Your anonymity is assured; the researchers who have requested your
+         participation will not receive any personal information about you.</p>
+    </div>`,
+  choices: ["I AGREE"],
+  button_html: '<button class="jspsych-btn consent-btn">%choice%</button>',
+  data: { task: "consent" },
+});
+
 // ---- Welcome & microphone ------------------------------------------
 timeline.push({
   type: jsPsychHtmlButtonResponse,
