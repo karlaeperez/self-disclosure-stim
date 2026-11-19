@@ -1043,9 +1043,10 @@ timeline.push({
   data: { task: "session_audio" },
   on_finish: (data) => {
     data.response = sessionAudio; // base64-encoded audio of the whole session
-    data.mime_type = session.recorder ? session.recorder.mimeType : null;
+    data.mime_type = session.recorder ? sessionMimeType() : null;
+    data.user_agent = navigator.userAgent; // browser and operating system
     // The audio is uploaded in pieces; audio_file is the name to give the rejoined recording
-    const ext = audioExtension(session.recorder?.mimeType || "audio/webm");
+    const ext = audioExtension(sessionMimeType());
     data.audio_file = sessionAudio ? `${fileBase}.${ext}` : null;
     data.audio_pieces = sessionAudio ? splitBase64(sessionAudio, AUDIO_PIECE_BYTES).length : 0;
     // Warm-up check results (from the last warm-up recording)
@@ -1065,6 +1066,16 @@ const UPLOAD_ATTEMPTS = 3;
 
 // Random suffix so a participant who restarts doesn't hit DataPipe's duplicate-filename rejection
 const fileBase = `other_descriptions_${pid}_${jsPsych.randomization.randomID(6)}`;
+
+// The recording's audio format. Firefox leaves recorder.mimeType empty (its recordings are Ogg),
+// so if it is missing, the format is read from the first bytes of the file itself.
+function sessionMimeType() {
+  if (session.recorder?.mimeType) return session.recorder.mimeType;
+  const head = sessionAudio ? atob(sessionAudio.slice(0, 16)) : ""; // first 12 bytes
+  if (head.startsWith("OggS")) return "audio/ogg";
+  if (head.slice(4, 8) === "ftyp") return "audio/mp4";
+  return "audio/webm";
+}
 
 function audioExtension(mimeType) {
   if (!mimeType) return "webm";
@@ -1150,7 +1161,7 @@ if (DATAPIPE_ENABLED) timeline.push({
   type: jsPsychCallFunction,
   func: () => {
     if (!sessionAudio) return; // nothing was recorded
-    const mimeType = session.recorder?.mimeType || "audio/webm";
+    const mimeType = sessionMimeType();
     const ext = audioExtension(mimeType);
     const pieces = splitBase64(sessionAudio, AUDIO_PIECE_BYTES);
     const uploaded = new Set();
