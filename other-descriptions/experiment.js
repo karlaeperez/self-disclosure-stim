@@ -52,7 +52,7 @@ const AUDIO_CHECK = {
   play_button: "Play recording",
   replay_button: "Play again",
   placeholder: "Type what you heard",
-  continue_button: "Continue",
+  continue_button: "Next",
 };
 
 // ---- Warm-up -------------------------------------------------------
@@ -62,8 +62,8 @@ const WARMUP = {
     <p>Now, let's practice recording your voice so you can check your audio.</p>
     <p>Read the sentence in the following screen aloud. Once you are done, click <b>Done Speaking</b>. Please listen to your recording and
        re-record until it sounds clear.</p>
-       <p>The recording will start automatically, right after you click <b>Continue</b> down below.</p>`,
-  start_button: `Continue (Start Recording<span class="btn-rec-dot"></span>)`,
+       <p>The recording will start automatically, right after you click <b>Next</b> down below.</p>`,
+  start_button: `Next (Start Recording<span class="btn-rec-dot"></span>)`,
   trial_prompt: "Read aloud:", // shown above the text on the warm-up trial ("" for none)
   text: "The trees are very tall and green.",
   recording_duration_ms: 10000,
@@ -81,7 +81,7 @@ const WARMUP = {
   // Transition screen shown after the warm-up, before the first intro video
   end_message: "<p>Thank you for checking your microphone! You are ready to begin the study.</p>",
   // Part 1 has no intro videos, so recording starts on the screen right after this one
-  end_button: `Continue (Start Recording<span class="btn-rec-dot"></span>)`,
+  end_button: `Next (Start Recording<span class="btn-rec-dot"></span>)`,
 };
 
 // ---- Video stimuli -------------------------------------------------
@@ -94,14 +94,14 @@ const VIDEO_FOLDER = "../mp4/";
 // They are not trials. Part 1's intro plays before the session recording starts; later parts'
 // intros are recorded, since the session recording runs without pauses from Part 1's first trial on.
 // The button stays disabled until each video has finished playing.
-const INTRO_BUTTON = "Continue";
+const INTRO_BUTTON = "Next";
 // On the last intro video, right before the part's first trial, if the recording hasn't started yet
-const INTRO_LAST_BUTTON = `Continue (Start Recording<span class="btn-rec-dot"></span>)`;
+const INTRO_LAST_BUTTON = `Next (Start Recording<span class="btn-rec-dot"></span>)`;
 
 // ---- End videos ----------------------------------------------------
 // Each part can also list end videos (end_videos below) that play in order after its last trial.
 // They are recorded, except for the last part's: the session recording stops when they start.
-const END_BUTTON = "Continue";
+const END_BUTTON = "Next";
 
 // ---- Main parts ----------------------------------------------------
 // Each part has its own intro videos, per-trial prompt, stimuli and settings.
@@ -344,7 +344,7 @@ const pid = jsPsych.data.getURLVariable("PROLIFIC_PID") || jsPsych.randomization
 const timeline = [];
 
 // ---- reCAPTCHA -----------------------------------------------------
-// Checkbox must be ticked before Continue is enabled; the token is then checked
+// Checkbox must be ticked before Next is enabled; the token is then checked
 // by the Cloudflare Worker (it expires after 2 minutes, so it must be checked live).
 let recaptchaResult = { passed: null, error: null };
 if (RECAPTCHA.enabled) timeline.push({
@@ -370,7 +370,7 @@ if (RECAPTCHA.enabled) timeline.push({
       <p>Before we begin, please confirm that you are not a robot.</p>
       <div id="recaptcha-box" style="display:inline-block; margin:10px 0;"></div>
       <p id="recaptcha-status" role="status"></p>
-      <p><button class="jspsych-btn" id="recaptcha-continue" disabled>Continue</button></p>`;
+      <p><button class="jspsych-btn" id="recaptcha-continue" disabled>Next</button></p>`;
     const status = display.querySelector("#recaptcha-status");
     const button = display.querySelector("#recaptcha-continue");
     let token = null;
@@ -446,7 +446,7 @@ timeline.push({
       <p>In this study you will answer a few questions aloud. Your voice will be recorded.</p>
       <p>Please sit in a quiet room. On the next screen, your browser will ask for permission to use your microphone.</p>
     </div>`,
-  choices: ["Continue"],
+  choices: ["Next"],
 });
 
 // Custom microphone setup 
