@@ -21,6 +21,17 @@ const UPLOAD_EMAIL_MESSAGE = `
      You will still be credited for completing the study.</p>
   <p>Once you have downloaded your files, click <b>Continue to Prolific</b>.</p>`;
 
+// ---- Comments (last screen; the audio uploads in the background meanwhile) ----
+const COMMENTS = {
+  title: "Thanks for participating in our study!",
+  prompt: "Do you have any comments about how we can improve this study? E.g., clearer instructions, louder videos.",
+  button: "Next", // the box is optional
+};
+// Shown while the data finishes saving, right before the redirect
+const SAVING_MESSAGE = `
+  <p>Saving your data. Please do not close this page.</p>
+  <p>You will be re-directed to Prolific in a moment.</p>`;
+
 // ---- Prolific ------------------------------------------------------
 // Participants are sent here at the end of the study
 const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=CJG2TUCF";
@@ -1071,19 +1082,64 @@ async function uploadAudioPieces(pieces, ext, uploaded = new Set()) {
 // Files that could not be uploaded: { filename, blob (offered as a download), retry (tries the upload again) }
 const failedUploads = [];
 
+// The audio starts uploading as soon as the session ends, so it uploads while the participant
+// writes their comments. Uploaded in pieces (see AUDIO_PIECE_BYTES); if any piece can't be
+// uploaded, the participant is later offered the complete recording to download instead.
+let audioUploadDone = Promise.resolve();
+timeline.push({
+  type: jsPsychCallFunction,
+  func: () => {
+    if (!sessionAudio) return; // nothing was recorded
+    const mimeType = session.recorder?.mimeType || "audio/webm";
+    const ext = audioExtension(mimeType);
+    const pieces = splitBase64(sessionAudio, AUDIO_PIECE_BYTES);
+    const uploaded = new Set();
+    audioUploadDone = (async () => {
+      if (!(await uploadAudioPieces(pieces, ext, uploaded))) {
+        const blob = await (await fetch(`data:${mimeType};base64,${sessionAudio}`)).blob();
+        failedUploads.push({ filename: `${fileBase}.${ext}`, blob, retry: () => uploadAudioPieces(pieces, ext, uploaded) });
+      }
+    })().catch((error) => console.error("Audio upload failed:", error));
+  },
+  data: { task: "audio_upload_start" },
+});
+
+// ---- Comments ------------------------------------------------------
+let commentsText = "";
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div class="instructions">
+      <h2>${COMMENTS.title}</h2>
+      <div class="text-response">
+        <label for="comments-box">${COMMENTS.prompt}</label>
+        <textarea id="comments-box" rows="5"></textarea>
+      </div>
+    </div>`,
+  choices: [COMMENTS.button],
+  on_load: () => {
+    const box = document.getElementById("comments-box");
+    box.addEventListener("input", () => (commentsText = box.value));
+  },
+  data: { task: "comments" },
+  on_finish: (data) => {
+    data.response = commentsText.trim();
+  },
+});
+
+// ---- Save the data (then wait for the audio) ------------------------
 timeline.push({
   type: jsPsychCallFunction,
   async: true,
   func: async function (done) {
-    jsPsych.getDisplayElement().innerHTML =
-      "<p>Saving your data. Please do not close this page.</p>";
+    jsPsych.getDisplayElement().innerHTML = `<div class="instructions">${SAVING_MESSAGE}</div>`;
 
     // reCAPTCHA result, hearing check, video loading info, main-part trials and session info (warm-up and instruction screens are excluded).
     // The audio itself is left out since it is uploaded as its own file.
     const dataString = JSON.stringify(
       jsPsych.data
         .get()
-        .filterCustom((trial) => ["recaptcha", "audio_check", "video_wait", "recording", "session_audio"].includes(trial.task))
+        .filterCustom((trial) => ["recaptcha", "audio_check", "video_wait", "recording", "session_audio", "comments"].includes(trial.task))
         .values()
         .map((trial) => (trial.task === "session_audio" ? { ...trial, response: null } : trial))
     );
@@ -1096,18 +1152,8 @@ timeline.push({
       });
     }
 
-    // Skipped if nothing was recorded. Uploaded in pieces (see AUDIO_PIECE_BYTES); if any piece
-    // can't be uploaded, the participant is offered the complete recording to download instead.
-    if (sessionAudio) {
-      const mimeType = session.recorder?.mimeType || "audio/webm";
-      const ext = audioExtension(mimeType);
-      const pieces = splitBase64(sessionAudio, AUDIO_PIECE_BYTES);
-      const uploaded = new Set();
-      if (!(await uploadAudioPieces(pieces, ext, uploaded))) {
-        const blob = await (await fetch(`data:${mimeType};base64,${sessionAudio}`)).blob();
-        failedUploads.push({ filename: `${fileBase}.${ext}`, blob, retry: () => uploadAudioPieces(pieces, ext, uploaded) });
-      }
-    }
+
+    await audioUploadDone; // started before the comments screen
     done({ upload_failed: failedUploads.map((f) => f.filename) });
   },
   data: { task: "upload" },
